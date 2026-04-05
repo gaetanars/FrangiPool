@@ -58,6 +58,13 @@ globals:
     restore_value: True
 
 interval:
+  - interval: 30s
+    then:
+      - if:
+          condition:
+            binary_sensor.is_on: antifreeze
+          then:
+            - switch.turn_on: pump
   - interval: 1min
     then:
       - if:
@@ -140,31 +147,12 @@ sensor:
           window_size: 18
           send_every: 6
           send_first_at: 6
-    on_value_range:
-      - below: !lambda return id(min_antifreeze_temp).state;
-        then:
-          - binary_sensor.template.publish:
-              id: antifreeze
-              state: ON
-          - switch.turn_on: pump
-          - homeassistant.action:
-              action: persistent_notification.create
-              data:
-                title: Message from ${friendly_name}
-              data_template:
-                message: Mode hors-gel actif
-      - above: !lambda return id(max_antifreeze_temp).state;
-        then:
-          - binary_sensor.template.publish:
-              id: antifreeze
-              state: OFF
-          - switch.turn_off: pump
-          - homeassistant.action:
-              action: persistent_notification.create
-              data:
-                title: Message from ${friendly_name}
-              data_template:
-                message: Fin du mode hors-gel
+
+  - platform: dallas_temp
+    address: $temp_address
+    id: pipe_temp_raw
+    internal: true
+    update_interval: 10s
 
   - platform: template
     name: Température Piscine
@@ -179,10 +167,11 @@ sensor:
   - platform: template
     name: Pump Uptime
     id: pump_uptime
-    internal: True
+    internal: true
+    unit_of_measurement: "min"
     lambda: |-
       if (id(pump).state){
-        return id(esptime).now().timestamp - id(pump_last_turn_on);
+        return (id(esptime).now().timestamp - id(pump_last_turn_on)) / 60.0;
       } else {
         return 0.0;
       }
@@ -208,6 +197,45 @@ binary_sensor:
     device_class: cold
     id: antifreeze
     icon: mdi:snowflake-alert
+    update_interval: 10s
+    lambda: |-
+      static bool state = false;
+
+      float t = id(pipe_temp_raw).state;
+      float on_threshold  = id(max_antifreeze_temp).state - 1.0;
+      float off_threshold = id(max_antifreeze_temp).state;
+
+      if (!state && t < on_threshold) {
+        state = true;
+      } else if (state && t >= off_threshold) {
+        state = false;
+      }
+
+      return state;
+    filters:
+      - delayed_on: 120s
+      - delayed_off: 300s
+    on_press:
+      then:
+        - homeassistant.action:
+            action: persistent_notification.create
+            data:
+              title: Message from ${friendly_name}
+            data_template:
+              message: >-
+                Mode hors-gel actif.
+                Température canalisation : {{ states('sensor.temperature_canalisation') }} °C
+    on_release:
+      then:
+        - switch.turn_off: pump
+        - homeassistant.action:
+            action: persistent_notification.create
+            data:
+              title: Message from ${friendly_name}
+            data_template:
+              message: >-
+                Fin du mode hors-gel.
+                Température canalisation : {{ states('sensor.temperature_canalisation') }} °C
 
   - platform: status
     name: Status
