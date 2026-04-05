@@ -28,8 +28,12 @@ number:
 
 sensor:
   - platform: ads1115
+    name: "ADS1115 Channel A0-GND"
     id: ads1115_a0
-    internal: true
+    unit_of_measurement: "mV"
+    device_class: "voltage"
+    state_class: "measurement"
+    entity_category: diagnostic
     multiplexer: 'A0_GND'
     gain: 6.144
     update_interval: 10s
@@ -44,16 +48,15 @@ sensor:
     icon: mdi:chemical-weapon
     entity_category: diagnostic
     id: realtime_redox
-    accuracy_decimals: 1
+    accuracy_decimals: 0
     update_interval: 10s
     lambda: |
       if (id(redox_manual_offset).state != 0.0) return ((2500-id(ads1115_a0).state)/1.037) + id(redox_manual_offset).state;
       else return ((2500-id(ads1115_a0).state)/1.037) + id(redox_offset);
     filters:
       - sliding_window_moving_average:
-          window_size: 18
-          send_every: 6
-          send_first_at: 6
+          window_size: 12
+          send_every: 3
 
   - platform: template
     name: Redox
@@ -62,7 +65,7 @@ sensor:
     state_class: "measurement"
     icon: mdi:chemical-weapon
     id: pool_redox
-    accuracy_decimals: 1
+    accuracy_decimals: 0
     lambda: return id(store_pool_redox);
 
   - platform: template
