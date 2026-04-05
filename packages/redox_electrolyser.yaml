@@ -1,0 +1,112 @@
+globals:
+  - id: redox_stable_minutes
+    type: int
+    restore_value: true
+    initial_value: '0'
+
+select:
+  - platform: template
+    name: Mode Electrolyseur
+    id: electrolyser_mode
+    optimistic: True
+    options:
+      - "Off"
+      - Auto
+      - Forcé
+    restore_value: True
+    initial_option: "Off"
+    entity_category: config
+    icon: mdi:chemical-weapon
+    on_value:
+      - lambda: |-
+          if (id(electrolyser_mode).state == "Off") {
+            id(electrolyser).turn_off();
+          } else if (id(electrolyser_mode).state == "Forcé") {
+            id(electrolyser).turn_on();
+          } else {
+            if (id(pool_redox).state > id(max_redox).state) {
+              id(electrolyser).turn_off();
+            } else {
+              id(electrolyser).turn_on();
+            }
+          }
+
+number:
+  - platform: template
+    name: Consigne Redox Max
+    id: max_redox
+    optimistic: True
+    unit_of_measurement: mV
+    device_class: voltage
+    step: 10
+    min_value: 670
+    max_value: 750
+    restore_value: True
+    initial_value: 740
+    entity_category: config
+
+  - platform: template
+    name: Consigne Redox Min
+    id: min_redox
+    optimistic: True
+    unit_of_measurement: mV
+    device_class: voltage
+    step: 10
+    min_value: 650
+    max_value: 730
+    restore_value: True
+    initial_value: 710
+    entity_category: config
+
+sensor:
+  - id: !extend pool_redox
+    on_value_range:
+      - above: !lambda return id(max_redox).state;
+        then:
+          - lambda: |-
+              if (id(electrolyser_mode).state == "Auto") {
+                id(electrolyser).turn_off();
+              }
+      - below: !lambda return id(min_redox).state;
+        then:
+          - lambda: |-
+              if (id(electrolyser_mode).state == "Auto") {
+                if (id(redox_trend_state) != 1) {
+                  id(electrolyser).turn_on();
+                }
+              }
+
+interval:
+  - interval: 1min
+    then:
+      - if:
+          condition:
+            lambda: 'return (int)id(redox_trend_state) <= 0;'
+          then:
+            - lambda: 'id(redox_stable_minutes) += 1;'
+          else:
+            - lambda: 'id(redox_stable_minutes) = 0;'
+      - delay: 10s
+      - lambda: |-
+          if (id(electrolyser_mode).state != "Auto") return;
+
+          if (!id(pump).state || (id(pump_uptime).state < id(pump_uptime_delay).state)) {
+            return;
+          }
+
+          float current = id(pool_redox).state;
+          float minr = id(min_redox).state;
+          float maxr = id(max_redox).state;
+          int stable_minutes = id(redox_stable_minutes);
+
+          if ((current > maxr) && (id(electrolyser).state)) {
+            id(electrolyser).turn_off();
+            return;
+          }
+
+          if ((current < minr) && (!id(electrolyser).state)) {
+            if (stable_minutes >= 30) {
+              id(electrolyser).turn_on();
+            }
+            return;
+          }
