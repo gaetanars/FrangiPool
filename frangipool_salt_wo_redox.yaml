@@ -22,6 +22,8 @@ dashboard_import:
 
 esp32:
   board: nodemcu-32s
+  framework:
+    type: esp-idf
 
 logger:
   level: INFO
@@ -29,6 +31,7 @@ logger:
 api:
 
 ota:
+  - platform: esphome
 
 improv_serial:
 
@@ -42,9 +45,9 @@ time:
     timezone: Europe/Paris
     id: esptime
 
-dallas:
-  - pin: GPIO23
-    update_interval: 10s
+one_wire:
+  - platform: gpio
+    pin: GPIO23
 
 i2c:
   sda: 21
@@ -132,10 +135,11 @@ number:
 
 sensor:
   # Sondes de températures
-  - platform: dallas
+  - platform: dallas_temp
     address: $local_temp_address
     name: Température Local
     id: local_temp
+    update_interval: 10s
     accuracy_decimals: 1
     filters:
       - sliding_window_moving_average:
@@ -143,10 +147,11 @@ sensor:
           send_every: 6
           send_first_at: 6
 
-  - platform: dallas
+  - platform: dallas_temp
     address: $temp_address
     name: Température Canalisation
     accuracy_decimals: 1
+    update_interval: 10s
     id: pipe_temp
     filters:
       - sliding_window_moving_average:
@@ -160,8 +165,8 @@ sensor:
               id: antifreeze
               state: ON
           - switch.turn_on: pump
-          - homeassistant.service:
-              service: persistent_notification.create
+          - homeassistant.action:
+              action: persistent_notification.create
               data:
                 title: Message from ${friendly_name}
               data_template:
@@ -172,8 +177,8 @@ sensor:
               id: antifreeze
               state: OFF
           - switch.turn_off: pump
-          - homeassistant.service:
-              service: persistent_notification.create
+          - homeassistant.action:
+              action: persistent_notification.create
               data:
                 title: Message from ${friendly_name}
               data_template:
@@ -216,7 +221,7 @@ sensor:
     accuracy_decimals: 1
     update_interval: 10s
     lambda: return 3.56 * id(ads1115_a1).state - 1.889 + id(ph_offset);
-     filters:
+    filters:
       - sliding_window_moving_average:
           window_size: 18
           send_every: 6
