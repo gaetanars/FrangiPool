@@ -32,6 +32,7 @@ template/main.go              ← generator (go:build ignore, runs via go genera
 main.go                       ← declares //go:generate, imports yaml.v3 dependency
 frangipool_*.yaml             ← generated output, one file per device variant
 README.md                     ← generated output
+docs/solutions/               ← documented solutions (bugs, best practices, workflow patterns), organized by category with YAML frontmatter (module, tags, problem_type)
 ```
 
 ### Device Variants
