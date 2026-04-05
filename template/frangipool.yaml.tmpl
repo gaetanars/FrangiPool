@@ -65,13 +65,34 @@ globals:
   - id: store_pool_temp
     type: float
     restore_value: True
+{{- if .Electrolyser }}
+  - id: electrolyser_last_turn_on
+    type: int
+    restore_value: true
+  - id: effective_electrolysis_minutes
+    type: int
+    restore_value: true
+    initial_value: '0'
+  - id: redox_stable_minutes
+    type: int
+    restore_value: true
+    initial_value: '0'
+{{- end }}
 {{- if .Redox }}
   - id: store_pool_redox
     type: float
-    restore_value: True
+    restore_value: true
   - id: redox_offset
     type: float
-    restore_value: True
+    restore_value: true
+  - id: last_redox_trend_value
+    type: float
+    restore_value: true
+    initial_value: '0.0'
+  - id: redox_trend_state
+    type: int
+    restore_value: no
+    initial_value: '0'
 {{- end }}
 {{- if .PH }}
   - id: store_pool_ph
@@ -92,6 +113,15 @@ interval:
             - switch.turn_on: pump
   - interval: 1min
     then:
+      {{- if .Electrolyser }}
+      - if:
+          condition:
+            and:
+              - switch.is_on: pump
+              - switch.is_on: electrolyser
+          then:
+            - lambda: "id(effective_electrolysis_minutes) += 1;"
+      {{- end }}
       - if:
           condition:
             and:
@@ -116,20 +146,83 @@ interval:
                 id: store_pool_ph
                 value: !lambda "return id(realtime_ph).state;"
           {{- end }}
+      {{- if and .Redox .Electrolyser }}
+      - if:
+          condition:
+            lambda: 'return (int)id(redox_trend_state) <= 0;'
+          then:
+            - lambda: 'id(redox_stable_minutes) += 1;'
+          else:
+            - lambda: 'id(redox_stable_minutes) = 0;'
+      - delay: 10s
+      - lambda: |-
+          if (id(electrolyser_mode).state != "Auto") return;
+
+          if (!id(pump).state || (id(pump_uptime).state < id(pump_uptime_delay).state)) {
+            return;
+          }
+
+          float current = id(pool_redox).state;
+          float minr = id(min_redox).state;
+          float maxr = id(max_redox).state;
+          int stable_minutes = id(redox_stable_minutes);
+
+          if ((current > maxr) && (id(electrolyser).state)) {
+            id(electrolyser).turn_off();
+            return;
+          }
+
+          if ((current < minr) && (!id(electrolyser).state)) {
+            if (stable_minutes >= 30) {
+              id(electrolyser).turn_on();
+            }
+            return;
+          }
+      {{- end }}
+{{- if .Redox }}
+  - interval: 5min
+    then:
+      - lambda: |-
+          float current = id(realtime_redox).state;
+          float diff = current - id(last_redox_trend_value);
+          if (diff > 2) {
+            id(redox_trend_state) = 1;
+          } else if (diff < -2) {
+            id(redox_trend_state) = -1;
+          } else {
+            id(redox_trend_state) = 0;
+          }
+          id(last_redox_trend_value) = current;
+{{- end }}
 
 select:
+{{ if and .Electrolyser .Redox }}
   - platform: template
-    name: Mode Filtration
+    name: Mode Electrolyseur
+    id: electrolyser_mode
     optimistic: True
     options:
-      - Auto
-      - On 24h
       - "Off"
-      - Hiver
+      - Auto
+      - Forcé
     restore_value: True
-    initial_option: Auto
+    initial_option: "Off"
     entity_category: config
-    icon: mdi:engine
+    icon: mdi:chemical-weapon
+    on_value:
+      - lambda: |-
+          if (id(electrolyser_mode).state == "Off") {
+            id(electrolyser).turn_off();
+          } else if (id(electrolyser_mode).state == "Forcé") {
+            id(electrolyser).turn_on();
+          } else {
+            if (id(pool_redox).state > id(max_redox).state) {
+              id(electrolyser).turn_off();
+            } else {
+              id(electrolyser).turn_on();
+            }
+          }
+{{ end }}
 {{ if .Booster }}
   - platform: template
     name: Mode Surpresseur
@@ -302,10 +395,18 @@ sensor:
     on_value_range:
       - above: !lambda return id(max_redox).state;
         then:
-        - switch.turn_off: electrolyser
+          - lambda: |-
+              if (id(electrolyser_mode).state == "Auto") {
+                id(electrolyser).turn_off();
+              }
       - below: !lambda return id(min_redox).state;
         then:
-        - switch.turn_on: electrolyser
+          - lambda: |-
+              if (id(electrolyser_mode).state == "Auto") {
+                if (id(redox_trend_state) != 1) {
+                  id(electrolyser).turn_on();
+                }
+              }
     {{- end }}
 
   - platform: template
@@ -445,6 +546,16 @@ switch:
     id: electrolyser
     restore_mode: RESTORE_DEFAULT_ON
     icon: mdi:chemical-weapon
+    on_turn_on:
+      then:
+        - globals.set:
+            id: electrolyser_last_turn_on
+            value: !lambda "return id(esptime).now().timestamp;"
+    on_turn_off:
+      then:
+        - globals.set:
+            id: effective_electrolysis_minutes
+            value: '0'
 {{ end }}
 button:
 {{- if .Redox }}
@@ -516,6 +627,20 @@ button:
   - platform: restart
     name: Reboot
 
+{{ if .Redox }}
+text_sensor:
+  - platform: template
+    name: "Tendance Redox"
+    entity_category: diagnostic
+    lambda: |-
+      if (id(redox_trend_state) == 1) {
+        return {"En montée"};
+      } else if (id(redox_trend_state) == -1) {
+        return {"En descente"};
+      } else {
+        return {"Stable"};
+      }
+{{ end }}
 status_led:
   pin:
     number: GPIO2

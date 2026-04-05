@@ -65,6 +65,17 @@ globals:
   - id: store_pool_temp
     type: float
     restore_value: True
+  - id: electrolyser_last_turn_on
+    type: int
+    restore_value: true
+  - id: effective_electrolysis_minutes
+    type: int
+    restore_value: true
+    initial_value: '0'
+  - id: redox_stable_minutes
+    type: int
+    restore_value: true
+    initial_value: '0'
   - id: store_pool_ph
     type: float
     restore_value: True
@@ -86,6 +97,13 @@ interval:
           condition:
             and:
               - switch.is_on: pump
+              - switch.is_on: electrolyser
+          then:
+            - lambda: "id(effective_electrolysis_minutes) += 1;"
+      - if:
+          condition:
+            and:
+              - switch.is_on: pump
               - lambda: |-
                   if (id(pump_uptime).state >= id(pump_uptime_delay).state){
                     return true;
@@ -101,18 +119,7 @@ interval:
                 value: !lambda "return id(realtime_ph).state;"
 
 select:
-  - platform: template
-    name: Mode Filtration
-    optimistic: True
-    options:
-      - Auto
-      - On 24h
-      - "Off"
-      - Hiver
-    restore_value: True
-    initial_option: Auto
-    entity_category: config
-    icon: mdi:engine
+
 
 number:
   - platform: template
@@ -316,6 +323,16 @@ switch:
     id: electrolyser
     restore_mode: RESTORE_DEFAULT_ON
     icon: mdi:chemical-weapon
+    on_turn_on:
+      then:
+        - globals.set:
+            id: electrolyser_last_turn_on
+            value: !lambda "return id(esptime).now().timestamp;"
+    on_turn_off:
+      then:
+        - globals.set:
+            id: effective_electrolysis_minutes
+            value: '0'
 
 button:
 
@@ -332,6 +349,7 @@ button:
 
   - platform: restart
     name: Reboot
+
 
 status_led:
   pin:
