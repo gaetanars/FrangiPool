@@ -1,7 +1,7 @@
 ---
 title: "refactor: Migrate to native ESPHome package architecture"
 type: refactor
-status: active
+status: completed
 date: 2026-04-05
 origin: docs/brainstorms/2026-04-05-esphome-package-architecture-requirements.md
 ---
