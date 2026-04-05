@@ -61,7 +61,7 @@ number:
     entity_category: config
 
   - platform: template
-    name: Délais Filtration
+    name: Délais mesures (au lancement de la filtration)
     id: pump_uptime_delay
     optimistic: True
     unit_of_measurement: min
@@ -69,7 +69,7 @@ number:
     min_value: 5
     max_value: 30
     restore_value: True
-    initial_value: 10
+    initial_value: 20
     entity_category: config
 
 sensor:
