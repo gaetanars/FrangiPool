@@ -141,7 +141,6 @@ binary_sensor:
     device_class: cold
     id: antifreeze
     icon: mdi:snowflake-alert
-    update_interval: 10s
     lambda: |-
       static bool state = false;
 
