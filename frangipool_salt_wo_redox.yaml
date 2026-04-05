@@ -22,6 +22,8 @@ dashboard_import:
 
 esp32:
   board: nodemcu-32s
+  framework:
+    type: esp-idf
 
 logger:
   level: INFO
@@ -29,6 +31,7 @@ logger:
 api:
 
 ota:
+  - platform: esphome
 
 improv_serial:
 
@@ -42,9 +45,9 @@ time:
     timezone: Europe/Paris
     id: esptime
 
-dallas:
-  - pin: GPIO23
-    update_interval: 10s
+one_wire:
+  - platform: gpio
+    pin: GPIO23
 
 i2c:
   sda: 21
@@ -62,6 +65,17 @@ globals:
   - id: store_pool_temp
     type: float
     restore_value: True
+  - id: electrolyser_last_turn_on
+    type: int
+    restore_value: true
+  - id: effective_electrolysis_minutes
+    type: int
+    restore_value: true
+    initial_value: '0'
+  - id: redox_stable_minutes
+    type: int
+    restore_value: true
+    initial_value: '0'
   - id: store_pool_ph
     type: float
     restore_value: True
@@ -70,8 +84,22 @@ globals:
     restore_value: True
 
 interval:
+  - interval: 30s
+    then:
+      - if:
+          condition:
+            binary_sensor.is_on: antifreeze
+          then:
+            - switch.turn_on: pump
   - interval: 1min
     then:
+      - if:
+          condition:
+            and:
+              - switch.is_on: pump
+              - switch.is_on: electrolyser
+          then:
+            - lambda: "id(effective_electrolysis_minutes) += 1;"
       - if:
           condition:
             and:
@@ -91,18 +119,7 @@ interval:
                 value: !lambda "return id(realtime_ph).state;"
 
 select:
-  - platform: template
-    name: Mode Filtration
-    optimistic: True
-    options:
-      - Auto
-      - On 24h
-      - "Off"
-      - Hiver
-    restore_value: True
-    initial_option: Auto
-    entity_category: config
-    icon: mdi:engine
+
 
 number:
   - platform: template
@@ -132,10 +149,11 @@ number:
 
 sensor:
   # Sondes de températures
-  - platform: dallas
+  - platform: dallas_temp
     address: $local_temp_address
     name: Température Local
     id: local_temp
+    update_interval: 10s
     accuracy_decimals: 1
     filters:
       - sliding_window_moving_average:
@@ -143,41 +161,23 @@ sensor:
           send_every: 6
           send_first_at: 6
 
-  - platform: dallas
+  - platform: dallas_temp
     address: $temp_address
     name: Température Canalisation
     accuracy_decimals: 1
+    update_interval: 10s
     id: pipe_temp
     filters:
       - sliding_window_moving_average:
           window_size: 18
           send_every: 6
           send_first_at: 6
-    on_value_range:
-      - below: !lambda return id(min_antifreeze_temp).state;
-        then:
-          - binary_sensor.template.publish:
-              id: antifreeze
-              state: ON
-          - switch.turn_on: pump
-          - homeassistant.service:
-              service: persistent_notification.create
-              data:
-                title: Message from ${friendly_name}
-              data_template:
-                message: Mode hors-gel actif
-      - above: !lambda return id(max_antifreeze_temp).state;
-        then:
-          - binary_sensor.template.publish:
-              id: antifreeze
-              state: OFF
-          - switch.turn_off: pump
-          - homeassistant.service:
-              service: persistent_notification.create
-              data:
-                title: Message from ${friendly_name}
-              data_template:
-                message: Fin du mode hors-gel
+
+  - platform: dallas_temp
+    address: $temp_address
+    id: pipe_temp_raw
+    internal: true
+    update_interval: 10s
 
   - platform: template
     name: Température Piscine
@@ -192,10 +192,11 @@ sensor:
   - platform: template
     name: Pump Uptime
     id: pump_uptime
-    internal: True
+    internal: true
+    unit_of_measurement: "min"
     lambda: |-
       if (id(pump).state){
-        return id(esptime).now().timestamp - id(pump_last_turn_on);
+        return (id(esptime).now().timestamp - id(pump_last_turn_on)) / 60.0;
       } else {
         return 0.0;
       }
@@ -216,7 +217,7 @@ sensor:
     accuracy_decimals: 1
     update_interval: 10s
     lambda: return 3.56 * id(ads1115_a1).state - 1.889 + id(ph_offset);
-     filters:
+    filters:
       - sliding_window_moving_average:
           window_size: 18
           send_every: 6
@@ -257,6 +258,45 @@ binary_sensor:
     device_class: cold
     id: antifreeze
     icon: mdi:snowflake-alert
+    update_interval: 10s
+    lambda: |-
+      static bool state = false;
+
+      float t = id(pipe_temp_raw).state;
+      float on_threshold  = id(max_antifreeze_temp).state - 1.0;
+      float off_threshold = id(max_antifreeze_temp).state;
+
+      if (!state && t < on_threshold) {
+        state = true;
+      } else if (state && t >= off_threshold) {
+        state = false;
+      }
+
+      return state;
+    filters:
+      - delayed_on: 120s
+      - delayed_off: 300s
+    on_press:
+      then:
+        - homeassistant.action:
+            action: persistent_notification.create
+            data:
+              title: Message from ${friendly_name}
+            data_template:
+              message: >-
+                Mode hors-gel actif.
+                Température canalisation : {{ states('sensor.temperature_canalisation') }} °C
+    on_release:
+      then:
+        - switch.turn_off: pump
+        - homeassistant.action:
+            action: persistent_notification.create
+            data:
+              title: Message from ${friendly_name}
+            data_template:
+              message: >-
+                Fin du mode hors-gel.
+                Température canalisation : {{ states('sensor.temperature_canalisation') }} °C
 
   - platform: status
     name: Status
@@ -283,6 +323,16 @@ switch:
     id: electrolyser
     restore_mode: RESTORE_DEFAULT_ON
     icon: mdi:chemical-weapon
+    on_turn_on:
+      then:
+        - globals.set:
+            id: electrolyser_last_turn_on
+            value: !lambda "return id(esptime).now().timestamp;"
+    on_turn_off:
+      then:
+        - globals.set:
+            id: effective_electrolysis_minutes
+            value: '0'
 
 button:
 
@@ -299,6 +349,7 @@ button:
 
   - platform: restart
     name: Reboot
+
 
 status_led:
   pin:
