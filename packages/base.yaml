@@ -221,12 +221,7 @@ interval:
           condition:
             and:
               - switch.is_on: pump
-              - lambda: |-
-                  if (id(pump_uptime).state >= id(pump_uptime_delay).state){
-                    return true;
-                  } else {
-                    return false;
-                  }
+              - lambda: "return id(pump_uptime).state >= id(pump_uptime_delay).state;"
           then:
             - globals.set:
                 id: store_pool_temp

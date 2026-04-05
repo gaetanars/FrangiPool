@@ -148,17 +148,11 @@ interval:
           condition:
             and:
               - switch.is_on: pump
-              - lambda: |-
-                  if (id(pump_uptime).state >= id(pump_uptime_delay).state){
-                    return true;
-                  } else {
-                    return false;
-                  }
+              - lambda: "return id(pump_uptime).state >= id(pump_uptime_delay).state;"
           then:
             - globals.set:
                 id: store_pool_redox
                 value: !lambda "return id(realtime_redox).state;"
-            - component.update: pool_redox
 
   - interval: 5min
     then:
