@@ -93,4 +93,4 @@ packages:
   redox_electrolyser: github://frangipool/esphome-config/packages/redox_electrolyser.yaml@main
 ```
 
-All packages are fetched directly from GitHub at compile time. Pin to a specific commit by replacing `@main` with a commit SHA.
+All packages are fetched directly from GitHub at compile time. Pin to a specific version by replacing `@main` with a branch name or a tag (e.g. `@v2.0.0`).
