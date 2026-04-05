@@ -1,0 +1,82 @@
+input_datetime:
+  heure_debut_filtration_1_piscine:
+    name: "Heure début 1ère période de filtration"
+    has_time: true
+    icon: mdi:clock-start
+  heure_fin_filtration_1_piscine:
+    name: "Heure fin 1ère période de filtration"
+    has_time: true
+    icon: mdi:clock-end
+  heure_debut_filtration_2_piscine:
+    name: "Heure début 2ième période de filtration"
+    has_time: true
+    icon: mdi:clock-start
+  heure_fin_filtration_2_piscine:
+    name: "Heure fin 2ième période de filtration"
+    has_time: true
+    icon: mdi:clock-end
+  heure_pivot_filtration_piscine:
+    name: "Heure pivot filtration"
+    has_time: true
+  heure_pivot_filtration_hivernage_piscine:
+    name: "Heure pivot filtration hivernage"
+    has_time: true
+
+input_number:
+  duree_filtration_piscine:
+    name: "Durée de filtration de la piscine"
+    min: 0
+    max: 1440
+    step: 1
+    unit_of_measurement: "min"
+    icon: mdi:timer-outline
+
+  duree_coupure_filtration_piscine:
+    name: "Durée de coupure de la filtration"
+    min: 0
+    max: 240
+    step: 10
+    unit_of_measurement: "min"
+    icon: mdi:timelapse
+  duree_coupure_filtration_hivernage_piscine:
+    name: "Durée de coupure de la filtration en hivernage"
+    min: 0
+    max: 240
+    step: 10
+    unit_of_measurement: "min"
+    icon: mdi:timelapse
+  coefficient_filtration_piscine:
+    name: "Coefficient d'ajustement du temps de filtration"
+    min: 30
+    max: 170
+    step: 5
+    unit_of_measurement: "%"
+    icon: mdi:timelapse
+
+input_button:
+  recalcul_temps_filtration_piscine:
+    name: "Recalcul du temps de filtration"
+    icon: mdi:gesture-tap-button
+
+input_select:
+  mode_filtration_piscine:
+    name: "Mode de filtration de la piscine"
+    icon: mdi:format-list-checks
+    options:
+      - "Courbe"
+      - "Hivernage"
+      - "Automatique"
+      - "Forcé"
+      - "Inactif"
+
+template:
+  - sensor:
+      name: "Heure pivot filtration sensor"
+      unique_id: heure_pivot_filtration
+      device_class: timestamp
+      state: "{{ today_at(states('input_datetime.heure_pivot_filtration_piscine')) }}"
+  - sensor:
+      name: "Heure pivot filtration hivernage sensor"
+      unique_id: heure_pivot_filtration_hivernage
+      device_class: timestamp
+      state: "{{ today_at(states('input_datetime.heure_pivot_filtration_hivernage_piscine')) }}"
