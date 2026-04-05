@@ -125,11 +125,6 @@ sensor:
         return 0.0;
       }
 
-  - platform: template
-    internal: True
-    id: min_antifreeze_temp
-    lambda: return id(max_antifreeze_temp).state - 1;
-
   - platform: uptime
     name: Uptime
     unit_of_measurement: s
