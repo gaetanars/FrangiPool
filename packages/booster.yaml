@@ -1,0 +1,22 @@
+select:
+  - platform: template
+    name: Mode Surpresseur
+    optimistic: True
+    options:
+      - "Off"
+      - Auto
+      - Forcé
+    restore_value: True
+    initial_option: "Off"
+    entity_category: config
+    icon: mdi:robot-mower
+
+switch:
+  - platform: gpio
+    pin:
+      number: GPIO26
+      inverted: true
+    name: Surpresseur
+    id: booster
+    restore_mode: RESTORE_DEFAULT_OFF
+    icon: mdi:robot-mower

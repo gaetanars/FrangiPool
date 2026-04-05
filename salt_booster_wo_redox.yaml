@@ -1,0 +1,23 @@
+substitutions:
+  name: frangipool
+  friendly_name: FrangiPool
+  local_temp_address: "0x0000000000000000"  # Remplacer par l'adresse de votre sonde locale (voir logs ESPHome au démarrage)
+  temp_address: "0x0000000000000000"  # Remplacer par l'adresse de votre sonde canalisation
+
+esphome:
+  name: ${name}
+  name_add_mac_suffix: false
+  friendly_name: ${friendly_name}
+  project:
+    name: frangipool.salt_booster_wo_redox
+    version: "2.0.0"
+
+dashboard_import:
+  package_import_url: github://frangipool/esphome-config/salt_booster_wo_redox.yaml@main
+
+packages:
+  base: github://frangipool/esphome-config/packages/base.yaml@main
+  i2c_ads1115: github://frangipool/esphome-config/packages/i2c_ads1115.yaml@main
+  electrolyser: github://frangipool/esphome-config/packages/electrolyser.yaml@main
+  booster: github://frangipool/esphome-config/packages/booster.yaml@main
+  ph: github://frangipool/esphome-config/packages/ph.yaml@main

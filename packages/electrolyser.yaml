@@ -1,0 +1,39 @@
+globals:
+  - id: electrolyser_last_turn_on
+    type: int
+    restore_value: true
+  - id: effective_electrolysis_minutes
+    type: int
+    restore_value: true
+    initial_value: '0'
+
+switch:
+  - platform: gpio
+    pin:
+      number: GPIO27
+      inverted: false
+    name: Electrolyseur
+    id: electrolyser
+    restore_mode: RESTORE_DEFAULT_ON
+    icon: mdi:chemical-weapon
+    on_turn_on:
+      then:
+        - globals.set:
+            id: electrolyser_last_turn_on
+            value: !lambda "return id(esptime).now().timestamp;"
+    on_turn_off:
+      then:
+        - globals.set:
+            id: effective_electrolysis_minutes
+            value: '0'
+
+interval:
+  - interval: 1min
+    then:
+      - if:
+          condition:
+            and:
+              - switch.is_on: pump
+              - switch.is_on: electrolyser
+          then:
+            - lambda: "id(effective_electrolysis_minutes) += 1;"

@@ -1,24 +1,13 @@
 substitutions:
   name: frangipool
   friendly_name: FrangiPool
-  local_temp_address: '0xC40416C23220FF28'
-  temp_address: '0x160121a14aac6f28'
+  local_temp_address: "0x0000000000000000"
+  temp_address: "0x0000000000000000"
 
 wifi:
   ap:
-    ssid: $friendly_name Fallback Hostspot
+    ssid: ${friendly_name} Fallback Hotspot
     password: "12345678"
-
-esphome:
-  name: ${name}
-  name_add_mac_suffix: false
-  friendly_name: ${friendly_name}
-  project:
-    name: frangipool.salt_wo_redox
-    version: "0.1.0"
-
-dashboard_import:
-  package_import_url: github://frangipool/esphome-config/frangipool_salt_wo_redox.yaml
 
 esp32:
   board: nodemcu-32s
@@ -49,15 +38,6 @@ one_wire:
   - platform: gpio
     pin: GPIO23
 
-i2c:
-  sda: 21
-  scl: 22
-  scan: true
-  id: bus_a
-
-ads1115:
-  - address: 0x48
-
 globals:
   - id: pump_last_turn_on
     type: int
@@ -65,61 +45,6 @@ globals:
   - id: store_pool_temp
     type: float
     restore_value: True
-  - id: electrolyser_last_turn_on
-    type: int
-    restore_value: true
-  - id: effective_electrolysis_minutes
-    type: int
-    restore_value: true
-    initial_value: '0'
-  - id: redox_stable_minutes
-    type: int
-    restore_value: true
-    initial_value: '0'
-  - id: store_pool_ph
-    type: float
-    restore_value: True
-  - id: ph_offset
-    type: float
-    restore_value: True
-
-interval:
-  - interval: 30s
-    then:
-      - if:
-          condition:
-            binary_sensor.is_on: antifreeze
-          then:
-            - switch.turn_on: pump
-  - interval: 1min
-    then:
-      - if:
-          condition:
-            and:
-              - switch.is_on: pump
-              - switch.is_on: electrolyser
-          then:
-            - lambda: "id(effective_electrolysis_minutes) += 1;"
-      - if:
-          condition:
-            and:
-              - switch.is_on: pump
-              - lambda: |-
-                  if (id(pump_uptime).state >= id(pump_uptime_delay).state){
-                    return true;
-                  } else {
-                    return false;
-                  }
-          then:
-            - globals.set:
-                id: store_pool_temp
-                value: !lambda "return id(pipe_temp).state;"
-            - globals.set:
-                id: store_pool_ph
-                value: !lambda "return id(realtime_ph).state;"
-
-select:
-
 
 number:
   - platform: template
@@ -148,9 +73,8 @@ number:
     entity_category: config
 
 sensor:
-  # Sondes de températures
   - platform: dallas_temp
-    address: $local_temp_address
+    address: ${local_temp_address}
     name: Température Local
     id: local_temp
     update_interval: 10s
@@ -162,7 +86,7 @@ sensor:
           send_first_at: 6
 
   - platform: dallas_temp
-    address: $temp_address
+    address: ${temp_address}
     name: Température Canalisation
     accuracy_decimals: 1
     update_interval: 10s
@@ -174,7 +98,7 @@ sensor:
           send_first_at: 6
 
   - platform: dallas_temp
-    address: $temp_address
+    address: ${temp_address}
     id: pipe_temp_raw
     internal: true
     update_interval: 10s
@@ -200,42 +124,6 @@ sensor:
       } else {
         return 0.0;
       }
-
-  - platform: ads1115
-    id: ads1115_a1
-    internal: true
-    multiplexer: 'A1_GND'
-    gain: 6.144
-    update_interval: 10s
-
-  - platform: template
-    name: pH Temps Réel
-    state_class: "measurement"
-    icon: mdi:ph
-    entity_category: diagnostic
-    id: realtime_ph
-    accuracy_decimals: 1
-    update_interval: 10s
-    lambda: return 3.56 * id(ads1115_a1).state - 1.889 + id(ph_offset);
-    filters:
-      - sliding_window_moving_average:
-          window_size: 18
-          send_every: 6
-          send_first_at: 6
-
-  - platform: template
-    name: pH
-    state_class: "measurement"
-    icon: mdi:ph
-    id: pool_ph
-    accuracy_decimals: 1
-    lambda: return id(store_pool_ph);
-
-  - platform: template
-    name: pH Offset
-    entity_category: diagnostic
-    id: ph_offset_sensor
-    lambda: return id(ph_offset);
 
   - platform: template
     internal: True
@@ -315,43 +203,37 @@ switch:
             id: pump_last_turn_on
             value: !lambda "return id(esptime).now().timestamp;"
 
-  - platform: gpio
-    pin:
-      number: GPIO27
-      inverted: false
-    name: Electrolyseur
-    id: electrolyser
-    restore_mode: RESTORE_DEFAULT_ON
-    icon: mdi:chemical-weapon
-    on_turn_on:
-      then:
-        - globals.set:
-            id: electrolyser_last_turn_on
-            value: !lambda "return id(esptime).now().timestamp;"
-    on_turn_off:
-      then:
-        - globals.set:
-            id: effective_electrolysis_minutes
-            value: '0'
-
 button:
-
-  - platform: template
-    name: pH Calibration 7.00
-    entity_category: config
-    on_press:
-      then:
-        - globals.set:
-            id: ph_offset
-            value: !lambda "return 7.0 - 3.56 * id(ads1115_a1).state - 1.889;"
-        - component.update: ph_offset_sensor
-        - component.update: realtime_ph
-
   - platform: restart
     name: Reboot
-
 
 status_led:
   pin:
     number: GPIO2
     inverted: yes
+
+interval:
+  - interval: 30s
+    then:
+      - if:
+          condition:
+            binary_sensor.is_on: antifreeze
+          then:
+            - switch.turn_on: pump
+
+  - interval: 1min
+    then:
+      - if:
+          condition:
+            and:
+              - switch.is_on: pump
+              - lambda: |-
+                  if (id(pump_uptime).state >= id(pump_uptime_delay).state){
+                    return true;
+                  } else {
+                    return false;
+                  }
+          then:
+            - globals.set:
+                id: store_pool_temp
+                value: !lambda "return id(pipe_temp).state;"
