@@ -16,7 +16,7 @@ globals:
 
 number:
   - platform: template
-    entity_category: "diagnostic"
+    entity_category: config
     name: "Redox Calibration Manuelle"
     min_value: -300
     max_value: 300
@@ -158,6 +158,7 @@ interval:
             - globals.set:
                 id: store_pool_redox
                 value: !lambda "return id(realtime_redox).state;"
+            - component.update: pool_redox
 
   - interval: 5min
     then:

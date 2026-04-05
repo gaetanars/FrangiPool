@@ -51,7 +51,7 @@ button:
       then:
         - globals.set:
             id: ph_offset
-            value: !lambda "return 7.0 - 3.56 * id(ads1115_a1).state - 1.889;"
+            value: !lambda "return 7.0 - 3.56 * id(ads1115_a1).state + 1.889;"
         - component.update: ph_offset_sensor
         - component.update: realtime_ph
 

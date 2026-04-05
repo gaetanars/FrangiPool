@@ -48,7 +48,7 @@ Once your FrangiPool device is registered in Home Assistant, you have access to 
 
 - **Consigne Antigel** : antifreeze temperature setpoint. Pump activates 1°C below the setpoint and stops at the setpoint. Uses the pipe temperature sensor.
 - **Consigne Redox Max / Min** : Redox thresholds (mV) for electrolyzer auto-regulation
-- **Délais Filtration** : minimum pump runtime (minutes) before recording pool temperature and Redox values
+- **Délais mesures (au lancement de la filtration)** : minimum pump runtime (minutes) before recording pool temperature and Redox values
 - **Mode Electrolyseur** : Off / Auto / Forcé
 - **Mode Surpresseur** : Off / Auto / Forcé
 - **Redox Calibration 225mV / 475mV** : calibrate the Redox probe in reference solution
