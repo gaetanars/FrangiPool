@@ -186,7 +186,9 @@ binary_sensor:
 
 switch:
   - platform: gpio
-    pin: GPIO25
+    pin:
+      number: GPIO25
+      inverted: true
     name: Filtration
     id: pump
     restore_mode: RESTORE_DEFAULT_OFF

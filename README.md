@@ -113,6 +113,14 @@ Pour les utilisateurs souhaitant composer une configuration personnalisée :
 | `packages/ph.yaml` | Capteur pH (ADS1115 A1), bouton de calibration |
 | `packages/redox_electrolyser.yaml` | Auto-régulation Redox de l'électrolyseur, Mode Inactif/Auto/Forcé, seuils Redox |
 
+## Relais Active-LOW
+
+Le PCB FrangiPool utilise des relais à logique **Active-LOW** : le relais se ferme (charge activée) quand la broche GPIO est à l'état bas (LOW), et s'ouvre quand elle est à l'état haut (HIGH).
+
+Au boot de l'ESP32, toutes les broches GPIO sont en état HIGH par défaut. Avec des relais Active-LOW, cela signifie que les charges sont **éteintes au démarrage**, ce qui évite toute activation intempestive de la pompe ou de l'électrolyseur pendant la séquence de boot.
+
+Les broches concernées utilisent `inverted: true` dans ESPHome pour que la logique applicative (ON/OFF) corresponde à l'état physique attendu.
+
 ## Configuration avancée
 
 Créer un fichier `ma-piscine.yaml` et composer les packages directement :
