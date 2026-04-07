@@ -29,10 +29,18 @@ esp32_improv:
 
 captive_portal:
 
+web_server:
+  port: 80
+  version: 3
+
 time:
-  - platform: homeassistant
-    timezone: Europe/Paris
+  - platform: sntp
     id: esptime
+    timezone: Europe/Paris
+    servers:
+      - 0.pool.ntp.org
+      - 1.pool.ntp.org
+      - 2.pool.ntp.org
 
 one_wire:
   - platform: gpio

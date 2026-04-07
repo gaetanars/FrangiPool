@@ -1,0 +1,317 @@
+globals:
+  - id: g_h_debut1
+    type: int
+    restore_value: false
+    initial_value: '0'
+  - id: g_h_fin1
+    type: int
+    restore_value: false
+    initial_value: '0'
+  - id: g_h_debut2
+    type: int
+    restore_value: false
+    initial_value: '0'
+  - id: g_h_fin2
+    type: int
+    restore_value: false
+    initial_value: '0'
+  # true = logique Hiver, false = logique Courbe (sub-mode du mode Auto)
+  - id: g_auto_submode
+    type: bool
+    restore_value: true
+    initial_value: 'false'
+  # true = premier calcul déjà effectué (désactive le seuil d'init à 16 °C)
+  - id: g_auto_initialized
+    type: bool
+    restore_value: true
+    initial_value: 'false'
+  - id: g_ntp_alert_sent
+    type: bool
+    restore_value: false
+    initial_value: 'false'
+  # 0 = hors cycle, 1 = cycle matin, 2 = cycle soir
+  - id: g_cycle_phase
+    type: int
+    restore_value: false
+    initial_value: '0'
+
+select:
+  - platform: template
+    name: Mode Filtration
+    id: filtration_mode
+    optimistic: true
+    options:
+      - "Off"
+      - "Hiver"
+      - "Courbe"
+      - "Auto"
+    restore_value: true
+    initial_option: "Auto"
+    entity_category: config
+    icon: mdi:pool
+    on_value:
+      then:
+        - script.execute: _calcul_filtration
+
+number:
+  - platform: template
+    name: Coefficient Filtration
+    id: filtration_coeff
+    optimistic: true
+    unit_of_measurement: "%"
+    step: 5
+    min_value: 50
+    max_value: 150
+    restore_value: true
+    initial_value: 100
+    entity_category: config
+    on_value:
+      then:
+        - script.execute: _calcul_filtration
+
+  - platform: template
+    name: Durée Pause Filtration
+    id: filtration_pause
+    optimistic: true
+    unit_of_measurement: "h"
+    step: 0.5
+    min_value: 0
+    max_value: 12
+    restore_value: true
+    initial_value: 8
+    entity_category: config
+    on_value:
+      then:
+        - script.execute: _calcul_filtration
+
+  - platform: template
+    name: Ratio Matin Filtration
+    id: filtration_ratio_matin
+    optimistic: true
+    unit_of_measurement: "%"
+    step: 5
+    min_value: 20
+    max_value: 50
+    restore_value: true
+    initial_value: 33
+    entity_category: config
+    on_value:
+      then:
+        - script.execute: _calcul_filtration
+
+  - platform: template
+    name: Durée Hiver Min
+    id: filtration_hiver_min
+    optimistic: true
+    unit_of_measurement: "h"
+    step: 0.5
+    min_value: 0
+    max_value: 12
+    restore_value: true
+    initial_value: 3
+    entity_category: config
+    on_value:
+      then:
+        - script.execute: _calcul_filtration
+
+  - platform: template
+    name: Diviseur Hiver
+    id: filtration_diviseur
+    optimistic: true
+    step: 0.5
+    min_value: 1
+    max_value: 5
+    restore_value: true
+    initial_value: 3
+    entity_category: config
+    on_value:
+      then:
+        - script.execute: _calcul_filtration
+
+datetime:
+  - platform: template
+    type: time
+    name: Heure Pivot Filtration
+    id: filtration_pivot
+    optimistic: true
+    restore_value: true
+    initial_value: "13:30:00"
+    entity_category: config
+    on_value:
+      then:
+        - script.execute: _calcul_filtration
+
+time:
+  - id: !extend esptime
+    on_time_sync:
+      # Premier calcul après synchronisation NTP (boot ou re-sync périodique).
+      # mode: queued absorbe les re-syncs multiples sans accumulation.
+      then:
+        - script.execute: _calcul_filtration
+    on_time:
+      - cron: "0 0 0 * * *"
+        then:
+          - script.execute: _calcul_filtration
+
+script:
+  # Alerte NTP envoyée une seule fois (via g_ntp_alert_sent guard dans l'interval).
+  - id: _ntp_alert_once
+    mode: single
+    then:
+      - lambda: 'id(g_ntp_alert_sent) = true;'
+      - homeassistant.action:
+          action: persistent_notification.create
+          data:
+            title: "FrangiPool - NTP"
+            message: "Synchronisation NTP non disponible. Pompe à l'arrêt."
+
+  - id: _calcul_filtration
+    mode: queued
+    max_runs: 1
+    then:
+      - lambda: |-
+          // Mode Off → fenêtres nulles, pompe dormante
+          if (id(filtration_mode).state == "Off") {
+            id(g_h_debut1) = 0; id(g_h_fin1) = 0;
+            id(g_h_debut2) = 0; id(g_h_fin2) = 0;
+            ESP_LOGI("filtration", "Mode Off: fenêtres nulles");
+            return;
+          }
+
+          // Température avec fallback NaN → 10 °C
+          float t = id(pool_temp).state;
+          if (std::isnan(t)) t = 10.0f;
+
+          // --- Calcul durée totale ---
+          float duree_h = 0.0f;
+          std::string mode = id(filtration_mode).state;
+
+          auto calc_courbe = [](float tc) -> float {
+            if (tc < 10.0f) tc = 10.0f;
+            return 0.00335f*tc*tc*tc - 0.14953f*tc*tc + 2.43489f*tc - 10.72859f;
+          };
+          auto calc_hiver = [](float temp, float dur_min, float diviseur) -> float {
+            return temp < 10.0f ? dur_min : temp / diviseur;
+          };
+
+          if (mode == "Courbe") {
+            duree_h = calc_courbe(t);
+          } else if (mode == "Hiver") {
+            duree_h = calc_hiver(t, id(filtration_hiver_min).state, id(filtration_diviseur).state);
+          } else {
+            // Mode Auto — hystérésis ±1 °C autour de 16 °C
+            bool is_hiver = id(g_auto_submode);
+            if (!id(g_auto_initialized)) {
+              // Premier calcul (boot / flash clear) : seuil direct à 16 °C sans hystérésis
+              is_hiver = (t < 16.0f);
+              id(g_auto_submode) = is_hiver;
+              id(g_auto_initialized) = true;
+            } else if (is_hiver && t > 17.0f) {
+              is_hiver = false;
+              id(g_auto_submode) = false;
+            } else if (!is_hiver && t < 15.0f) {
+              is_hiver = true;
+              id(g_auto_submode) = true;
+            }
+            duree_h = is_hiver
+              ? calc_hiver(t, id(filtration_hiver_min).state, id(filtration_diviseur).state)
+              : calc_courbe(t);
+          }
+
+          // Appliquer coefficient et clamp [0, 1439 min]
+          duree_h *= id(filtration_coeff).state / 100.0f;
+          if (duree_h < 0.0f) duree_h = 0.0f;
+          int dur_total_min = (int)(duree_h * 60.0f);
+          if (dur_total_min > 1439) dur_total_min = 1439;
+
+          // Répartition matin/soir
+          int dur_matin_min = (int)(dur_total_min * id(filtration_ratio_matin).state / 100.0f);
+          int dur_soir_min  = dur_total_min - dur_matin_min;
+
+          // Pivot et pause (en minutes depuis minuit)
+          int pivot_min = id(filtration_pivot).hour * 60 + id(filtration_pivot).minute;
+          int pause_min = (int)(id(filtration_pause).state * 60.0f);
+          // pause=0 → pause_start == pause_end == pivot : cycles contigus
+          int pause_start = pivot_min - pause_min / 2;
+          int pause_end   = pivot_min + (pause_min - pause_min / 2); // arrondi correct
+
+          // Calcul fenêtres
+          int h_debut1 = pause_start - dur_matin_min;
+          int h_fin1   = pause_start;
+          int h_debut2 = pause_end;
+          int h_fin2   = pause_end + dur_soir_min;
+
+          // Clamping indépendant par cycle
+          if (h_debut1 < 0)    h_debut1 = 0;
+          if (h_fin1   > 1439) h_fin1   = 1439;
+          if (h_debut2 < 0)    h_debut2 = 0;
+          if (h_fin2   > 1439) h_fin2   = 1439;
+
+          id(g_h_debut1) = h_debut1; id(g_h_fin1) = h_fin1;
+          id(g_h_debut2) = h_debut2; id(g_h_fin2) = h_fin2;
+
+          ESP_LOGI("filtration",
+            "Calcul: T=%.1f°C mode=%s dur=%dmin matin:[%02d:%02d-%02d:%02d] soir:[%02d:%02d-%02d:%02d]",
+            t, mode.c_str(), dur_total_min,
+            h_debut1/60, h_debut1%60, h_fin1/60, h_fin1%60,
+            h_debut2/60, h_debut2%60, h_fin2/60, h_fin2%60);
+
+interval:
+  - interval: 30s
+    then:
+      - lambda: |-
+          auto now = id(esptime).now();
+
+          // Guard NTP
+          if (!now.is_valid()) {
+            if (!id(g_ntp_alert_sent)) {
+              id(_ntp_alert_once).execute();
+            }
+            ESP_LOGW("filtration", "NTP non synchronisé - pompe à l'arrêt");
+            id(pump).turn_off();
+            return;
+          }
+          if (id(g_ntp_alert_sent)) {
+            id(g_ntp_alert_sent) = false;
+          }
+
+          // Antigel prioritaire (override même en mode Off — g_cycle_phase inchangé)
+          if (id(antifreeze).state) {
+            id(pump).turn_on();
+            return;
+          }
+
+          // Mode Off
+          if (id(filtration_mode).state == "Off") {
+            id(g_cycle_phase) = 0;
+            id(pump).turn_off();
+            return;
+          }
+
+          int current_min = now.hour * 60 + now.minute;
+
+          // Cycle matin
+          if (current_min >= id(g_h_debut1) && current_min < id(g_h_fin1)) {
+            id(g_cycle_phase) = 1;
+            id(pump).turn_on();
+            return;
+          }
+
+          // Cycle soir
+          if (current_min >= id(g_h_debut2) && current_min < id(g_h_fin2)) {
+            id(g_cycle_phase) = 2;
+            id(pump).turn_on();
+            return;
+          }
+
+          // Hors fenêtres
+          if (id(g_cycle_phase) == 2) {
+            // Fin cycle soir → recalcul pour le lendemain
+            id(g_cycle_phase) = 0;
+            id(_calcul_filtration).execute();
+          } else if (id(g_cycle_phase) == 1) {
+            // Entrée pause → recalcul avec T post-matin pour dimensionner le cycle soir
+            id(g_cycle_phase) = 0;
+            id(_calcul_filtration).execute();
+          }
+          id(pump).turn_off();

@@ -17,6 +17,7 @@ dashboard_import:
 
 packages:
   base: github://frangipool/esphome-config/packages/base.yaml@main
+  filtration: !include packages/filtration.yaml
   i2c_ads1115: github://frangipool/esphome-config/packages/i2c_ads1115.yaml@main
   electrolyser: github://frangipool/esphome-config/packages/electrolyser.yaml@main
   booster: github://frangipool/esphome-config/packages/booster.yaml@main

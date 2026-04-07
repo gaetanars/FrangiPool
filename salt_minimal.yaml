@@ -17,4 +17,5 @@ dashboard_import:
 
 packages:
   base: github://frangipool/esphome-config/packages/base.yaml@main
+  filtration: !include packages/filtration.yaml
   electrolyser: github://frangipool/esphome-config/packages/electrolyser.yaml@main
