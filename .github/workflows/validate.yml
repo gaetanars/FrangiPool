@@ -1,0 +1,36 @@
+name: Validate ESPHome configs
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        config:
+          - salt_minimal.yaml
+          - salt_full.yaml
+          - salt_wo_ph.yaml
+          - salt_wo_redox.yaml
+          - salt_booster_minimal.yaml
+          - salt_booster_full.yaml
+          - salt_booster_wo_ph.yaml
+          - salt_booster_wo_redox.yaml
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install ESPHome
+        run: pip install esphome
+
+      - name: Override remote packages with local files
+        # Remplace github://frangipool/esphome-config/packages/X.yaml@main par !include packages/X.yaml
+        # afin que la CI valide les packages du commit en cours et non ceux de @main.
+        run: |
+          sed -i 's|github://frangipool/esphome-config/packages/\(.*\)\.yaml@main|!include packages/\1.yaml|g' \
+            ${{ matrix.config }}
+
+      - name: Validate ${{ matrix.config }}
+        run: esphome config ${{ matrix.config }}
