@@ -34,13 +34,9 @@ web_server:
   version: 3
 
 time:
-  - platform: sntp
+  - platform: homeassistant
     id: esptime
     timezone: Europe/Paris
-    servers:
-      - 0.pool.ntp.org
-      - 1.pool.ntp.org
-      - 2.pool.ntp.org
 
 one_wire:
   - platform: gpio

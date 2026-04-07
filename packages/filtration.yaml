@@ -162,8 +162,8 @@ script:
       - homeassistant.action:
           action: persistent_notification.create
           data:
-            title: "FrangiPool - NTP"
-            message: "Synchronisation NTP non disponible. Pompe à l'arrêt."
+            title: "FrangiPool - Heure"
+            message: "Heure non synchronisée avec Home Assistant. Pompe à l'arrêt."
 
   - id: _calcul_filtration
     mode: queued
@@ -267,7 +267,7 @@ interval:
             if (!id(g_ntp_alert_sent)) {
               id(_ntp_alert_once).execute();
             }
-            ESP_LOGW("filtration", "NTP non synchronisé - pompe à l'arrêt");
+            ESP_LOGW("filtration", "Heure HA non synchronisée - pompe à l'arrêt");
             id(pump).turn_off();
             return;
           }
