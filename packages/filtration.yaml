@@ -41,6 +41,12 @@ globals:
     type: int
     restore_value: false
     initial_value: '0'
+  # Secondes restantes en mode forcé (décrémenté de 30 à chaque tick de l'intervalle).
+  # restore_value: false garantit la non-persistance au reboot (R8).
+  - id: g_forced_remaining_s
+    type: int
+    restore_value: false
+    initial_value: '0'
 
 select:
   - platform: template
@@ -158,6 +164,53 @@ button:
       then:
         - script.execute: _calcul_filtration
 
+  - platform: template
+    name: "Forcer Filtration 2h"
+    id: filtration_force_2h
+    entity_category: config
+    icon: mdi:timer-2
+    on_press:
+      then:
+        - lambda: |-
+            id(g_forced_remaining_s) = 2 * 3600;
+            id(pump).turn_on();
+            id(forced_countdown).update();
+
+  - platform: template
+    name: "Forcer Filtration 6h"
+    id: filtration_force_6h
+    entity_category: config
+    icon: mdi:timer-6
+    on_press:
+      then:
+        - lambda: |-
+            id(g_forced_remaining_s) = 6 * 3600;
+            id(pump).turn_on();
+            id(forced_countdown).update();
+
+  - platform: template
+    name: "Forcer Filtration 24h"
+    id: filtration_force_24h
+    entity_category: config
+    icon: mdi:timer-24
+    on_press:
+      then:
+        - lambda: |-
+            id(g_forced_remaining_s) = 24 * 3600;
+            id(pump).turn_on();
+            id(forced_countdown).update();
+
+  - platform: template
+    name: "Arrêter Mode Forcé"
+    id: filtration_force_stop
+    entity_category: config
+    icon: mdi:timer-off-outline
+    on_press:
+      then:
+        - lambda: |-
+            id(g_forced_remaining_s) = 0;
+            id(forced_countdown).update();
+
 sensor:
   - platform: template
     name: Durée Filtration Journalière
@@ -208,6 +261,25 @@ text_sensor:
     lambda: |-
       if (id(filtration_mode).state != "Auto") return {"N/A"};
       return id(g_auto_submode) ? std::string{"Hiver"} : std::string{"Courbe"};
+
+  - platform: template
+    name: "Mode Forcé — Temps restant"
+    id: forced_countdown
+    entity_category: diagnostic
+    icon: mdi:timer-play-outline
+    update_interval: never
+    lambda: |-
+      int s = id(g_forced_remaining_s);
+      if (s <= 0) return {"Inactif"};
+      int h = s / 3600;
+      int m = (s % 3600) / 60;
+      char buf[20];
+      if (h > 0) {
+        snprintf(buf, sizeof(buf), "%dh %dmin", h, m);
+      } else {
+        snprintf(buf, sizeof(buf), "%dmin", m);
+      }
+      return {buf};
 
 time:
   - id: !extend esptime
@@ -366,6 +438,17 @@ interval:
             return;
           }
 
+          // Mode forcé — vérifié avant le garde NTP pour fonctionner sans synchronisation.
+          // Décrémente le compteur de 30 s à chaque tick, maintient la pompe ON, puis
+          // rend la main à la planification une fois le compteur épuisé.
+          if (id(g_forced_remaining_s) > 0) {
+            id(g_forced_remaining_s) -= 30;
+            if (id(g_forced_remaining_s) < 0) id(g_forced_remaining_s) = 0;
+            id(pump).turn_on();
+            id(forced_countdown).update();
+            return;
+          }
+
           auto now = id(esptime).now();
 
           // Guard NTP : sans heure valide, impossible de respecter le planning.
@@ -408,10 +491,12 @@ interval:
           if (id(g_cycle_phase) == 2) {
             // Fin cycle soir → recalcul pour le lendemain
             id(g_cycle_phase) = 0;
-            id(_calcul_filtration).execute();
+            // Garde mode forcé : recalcul uniquement si aucun mode forcé n'est actif
+            if (id(g_forced_remaining_s) == 0) id(_calcul_filtration).execute();
           } else if (id(g_cycle_phase) == 1) {
             // Entrée pause → recalcul avec T post-matin pour dimensionner le cycle soir
             id(g_cycle_phase) = 0;
-            id(_calcul_filtration).execute();
+            // Garde mode forcé : recalcul uniquement si aucun mode forcé n'est actif
+            if (id(g_forced_remaining_s) == 0) id(_calcul_filtration).execute();
           }
           id(pump).turn_off();
