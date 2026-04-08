@@ -1,0 +1,358 @@
+# Dashboard Home Assistant — FrangiPool
+#
+# Import : HA Settings → Dashboards → Add dashboard → From YAML (raw config editor)
+#
+# Adaptation au device name :
+#   Remplacez toutes les occurrences de "frangipool" par votre device name ESPHome.
+#   Exemple : si votre ESP s'appelle "ma-piscine", utilisez "ma_piscine"
+#   (les tirets deviennent des underscores dans les entity IDs Home Assistant).
+#
+# Prérequis : HACS + apexcharts-card installé
+#   https://github.com/RomRider/apexcharts-card
+#
+# Note : l'uptime s'affiche en secondes brutes (HA ne supporte pas format:duration
+# pour les capteurs de durée — limitation connue).
+
+title: FrangiPool
+views:
+  - title: Piscine
+    path: piscine
+    panel: true
+    cards:
+      - type: vertical-stack
+        cards:
+
+          # ==============================================================
+          # SECTION 1 — ÉTAT DE LA PISCINE
+          # ==============================================================
+
+          # Commandes principales (toujours visibles)
+          - type: entities
+            title: Commandes
+            entities:
+              - entity: switch.frangipool_filtration
+                name: Pompe Filtration
+              - entity: switch.frangipool_electrolyseur
+                name: Électrolyseur
+
+          # Surpresseur — conditionnel (presets salt_booster_* uniquement)
+          - type: conditional
+            conditions:
+              - condition: state
+                entity: switch.frangipool_surpresseur
+                state_not: unavailable
+              - condition: state
+                entity: switch.frangipool_surpresseur
+                state_not: unknown
+            card:
+              type: entities
+              title: Surpresseur
+              entities:
+                - entity: switch.frangipool_surpresseur
+                  name: Surpresseur
+                - entity: select.frangipool_mode_surpresseur
+                  name: Mode Surpresseur
+
+          # pH — conditionnel (presets avec packages/ph.yaml)
+          # Plages d'affichage : vert 7.2–7.4 | orange 7.0–7.2 et 7.4–7.6 | rouge hors plage
+          # (distinct des consignes de régulation Redox de l'électrolyseur)
+          - type: conditional
+            conditions:
+              - condition: state
+                entity: sensor.frangipool_ph
+                state_not: unavailable
+              - condition: state
+                entity: sensor.frangipool_ph
+                state_not: unknown
+            card:
+              type: entity
+              entity: sensor.frangipool_ph
+              name: pH
+
+          # Redox — conditionnel (presets avec packages/redox.yaml)
+          # Plages d'affichage : vert 650–750 mV | orange 600–650 et 750–800 mV | rouge hors plage
+          - type: conditional
+            conditions:
+              - condition: state
+                entity: sensor.frangipool_redox
+                state_not: unavailable
+              - condition: state
+                entity: sensor.frangipool_redox
+                state_not: unknown
+            card:
+              type: entity
+              entity: sensor.frangipool_redox
+              name: Redox (ORP)
+
+          # Température piscine (toujours visible)
+          - type: entity
+            entity: sensor.frangipool_temperature_piscine
+            name: Température Piscine
+
+          # Diagnostics filtration (toujours visible — filtration.yaml dans tous les presets)
+          - type: entities
+            title: Filtration
+            entities:
+              - entity: sensor.frangipool_phase_filtration
+                name: Phase
+              - entity: sensor.frangipool_horaires_filtration
+                name: Horaires
+              - entity: sensor.frangipool_duree_filtration_journaliere
+                name: Durée journalière (min)
+              - entity: sensor.frangipool_mode_auto_actif
+                name: Mode Auto actif
+
+          # ==============================================================
+          # SECTION 2 — GRAPHIQUES HISTORIQUES (7 jours)
+          # ==============================================================
+
+          # Graphique pH — conditionnel
+          - type: conditional
+            conditions:
+              - condition: state
+                entity: sensor.frangipool_ph
+                state_not: unavailable
+              - condition: state
+                entity: sensor.frangipool_ph
+                state_not: unknown
+            card:
+              type: custom:apexcharts-card
+              # color_threshold colore la ligne selon la valeur courante
+              # Requis : clé top-level, pas dans la série
+              experimental:
+                color_threshold: true
+              header:
+                show: true
+                title: pH (7 jours)
+              graph_span: 7d
+              yaxis:
+                - id: ph
+                  min: 6.5
+                  max: 7.8
+                  decimals: 1
+              series:
+                - entity: sensor.frangipool_ph
+                  name: pH
+                  yaxis_id: ph
+                  type: line
+                  stroke_width: 2
+                  curve: smooth
+                  group_by:
+                    func: avg
+                    duration: 1h
+                  # Couleur dynamique de la ligne
+                  # Chaque entrée = "à partir de cette valeur, utiliser cette couleur"
+                  color_threshold:
+                    - value: 0
+                      color: "#e74c3c"    # rouge  : pH < 7.0
+                    - value: 7.0
+                      color: "#e67e22"    # orange : 7.0 – 7.2
+                    - value: 7.2
+                      color: "#27ae60"    # vert   : 7.2 – 7.4 (optimal)
+                    - value: 7.4
+                      color: "#e67e22"    # orange : 7.4 – 7.6
+                    - value: 7.6
+                      color: "#e74c3c"    # rouge  : > 7.6
+              # Bandes de fond colorées (zones statiques)
+              apex_config:
+                annotations:
+                  position: back
+                  yaxis:
+                    - y: 6.5
+                      y2: 7.0
+                      fillColor: "#e74c3c"
+                      borderColor: "#00000000"
+                      opacity: 0.12
+                    - y: 7.0
+                      y2: 7.2
+                      fillColor: "#e67e22"
+                      borderColor: "#00000000"
+                      opacity: 0.12
+                    - y: 7.2
+                      y2: 7.4
+                      fillColor: "#27ae60"
+                      borderColor: "#00000000"
+                      opacity: 0.12
+                    - y: 7.4
+                      y2: 7.6
+                      fillColor: "#e67e22"
+                      borderColor: "#00000000"
+                      opacity: 0.12
+                    - y: 7.6
+                      y2: 7.8
+                      fillColor: "#e74c3c"
+                      borderColor: "#00000000"
+                      opacity: 0.12
+
+          # Graphique Redox — conditionnel
+          - type: conditional
+            conditions:
+              - condition: state
+                entity: sensor.frangipool_redox
+                state_not: unavailable
+              - condition: state
+                entity: sensor.frangipool_redox
+                state_not: unknown
+            card:
+              type: custom:apexcharts-card
+              experimental:
+                color_threshold: true
+              header:
+                show: true
+                title: Redox / ORP (7 jours)
+              graph_span: 7d
+              yaxis:
+                - id: redox
+                  min: 500
+                  max: 900
+                  decimals: 0
+              series:
+                - entity: sensor.frangipool_redox
+                  name: Redox (mV)
+                  yaxis_id: redox
+                  type: line
+                  stroke_width: 2
+                  curve: smooth
+                  group_by:
+                    func: avg
+                    duration: 1h
+                  color_threshold:
+                    - value: 0
+                      color: "#e74c3c"    # rouge  : Redox < 600 mV
+                    - value: 600
+                      color: "#e67e22"    # orange : 600 – 650 mV
+                    - value: 650
+                      color: "#27ae60"    # vert   : 650 – 750 mV (optimal)
+                    - value: 750
+                      color: "#e67e22"    # orange : 750 – 800 mV
+                    - value: 800
+                      color: "#e74c3c"    # rouge  : > 800 mV
+              apex_config:
+                annotations:
+                  position: back
+                  yaxis:
+                    - y: 500
+                      y2: 600
+                      fillColor: "#e74c3c"
+                      borderColor: "#00000000"
+                      opacity: 0.12
+                    - y: 600
+                      y2: 650
+                      fillColor: "#e67e22"
+                      borderColor: "#00000000"
+                      opacity: 0.12
+                    - y: 650
+                      y2: 750
+                      fillColor: "#27ae60"
+                      borderColor: "#00000000"
+                      opacity: 0.12
+                    - y: 750
+                      y2: 800
+                      fillColor: "#e67e22"
+                      borderColor: "#00000000"
+                      opacity: 0.12
+                    - y: 800
+                      y2: 900
+                      fillColor: "#e74c3c"
+                      borderColor: "#00000000"
+                      opacity: 0.12
+
+          # Graphique Température — toujours visible
+          - type: custom:apexcharts-card
+            header:
+              show: true
+              title: Température Piscine (7 jours)
+            graph_span: 7d
+            yaxis:
+              - id: temp
+                min: 0
+                max: 35
+                decimals: 1
+            series:
+              - entity: sensor.frangipool_temperature_piscine
+                name: Température (°C)
+                yaxis_id: temp
+                type: area
+                stroke_width: 2
+                curve: smooth
+                color: "#3498db"
+                group_by:
+                  func: avg
+                  duration: 1h
+
+          # ==============================================================
+          # SECTION 3 — CONFIGURATION FILTRATION (toujours visible)
+          # ==============================================================
+
+          - type: entities
+            title: Configuration Filtration
+            entities:
+              - entity: select.frangipool_mode_filtration
+                name: Mode
+              - entity: datetime.frangipool_heure_pivot_filtration
+                name: Heure Pivot
+              - entity: number.frangipool_duree_pause_filtration
+                name: Durée Pause (h)
+              - entity: number.frangipool_ratio_matin_filtration
+                name: Ratio Matin (%)
+              - entity: number.frangipool_coefficient_filtration
+                name: Coefficient (%)
+              - entity: button.frangipool_recalcul_filtration
+                name: Recalcul
+              - entity: number.frangipool_duree_hiver_min
+                name: Durée Hiver Min (h)
+              - entity: number.frangipool_diviseur_hiver
+                name: Diviseur Hiver
+              - entity: number.frangipool_consigne_antigel
+                name: Consigne Antigel (°C)
+              # Note : si "Entity not found", vérifiez l'ID dans HA Developer Tools → States.
+              # Le nom ESPHome contient des parenthèses qui peuvent modifier le slug généré.
+              - entity: number.frangipool_delais_mesures_au_lancement_de_la_filtration
+                name: Délai Mesures (min)
+
+          # ==============================================================
+          # SECTION 4 — ÉLECTROLYSEUR & REDOX
+          # Conditionnelle : absent dans les presets sans redox_electrolyser.yaml
+          # Trigger : select.frangipool_mode_electrolyseur (pas switch.frangipool_electrolyseur
+          # qui existe dans salt_minimal sans les consignes Redox associées)
+          # ==============================================================
+
+          - type: conditional
+            conditions:
+              - condition: state
+                entity: select.frangipool_mode_electrolyseur
+                state_not: unavailable
+              - condition: state
+                entity: select.frangipool_mode_electrolyseur
+                state_not: unknown
+            card:
+              type: entities
+              title: Électrolyseur & Redox
+              entities:
+                - entity: select.frangipool_mode_electrolyseur
+                  name: Mode Électrolyseur
+                # Consignes de régulation (distinct des plages d'affichage du graphique)
+                - entity: number.frangipool_consigne_redox_min
+                  name: Consigne Redox Min (mV)
+                - entity: number.frangipool_consigne_redox_max
+                  name: Consigne Redox Max (mV)
+
+          # ==============================================================
+          # SECTION 5 — DIAGNOSTICS
+          # ==============================================================
+
+          - type: entities
+            title: Diagnostics
+            entities:
+              # Uptime en secondes brutes — HA ne supporte pas format:duration
+              # pour les capteurs de durée (limitation connue depuis HA 2024.12)
+              - entity: sensor.frangipool_uptime
+                name: Uptime (s)
+              - entity: sensor.frangipool_rssi
+                name: Signal WiFi (dBm)
+              - entity: binary_sensor.frangipool_status
+                name: Connexion ESP
+              - entity: binary_sensor.frangipool_antigel
+                name: Mode Antigel actif
+              - entity: button.frangipool_reboot
+                name: Redémarrer l'ESP

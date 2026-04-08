@@ -111,6 +111,27 @@ Disponibles selon le preset :
 | **Calibration pH 7.00** | Calibration de la sonde pH dans un tampon pH 7.00 |
 | **Redémarrage** | Redémarre l'ESP |
 
+## Dashboard Home Assistant
+
+Un dashboard Lovelace dédié est disponible dans le repo : [`homeassistant/dashboard/frangipool.yaml`](homeassistant/dashboard/frangipool.yaml).
+
+**Prérequis :** [HACS](https://hacs.xyz/) installé avec la carte [apexcharts-card](https://github.com/RomRider/apexcharts-card).
+
+**Import :** HA Settings → Dashboards → Add dashboard → From YAML (raw config editor) → coller le contenu du fichier.
+
+Le dashboard affiche sur une page unique :
+
+- État de la piscine : pompe, électrolyseur, pH et Redox avec coloration contextuelle (vert/orange/rouge), température
+- Diagnostics de filtration : phase courante, horaires calculés, durée journalière, mode Auto actif
+- Graphiques 7 jours : pH, Redox et température avec zones de couleur
+- Configuration : paramètres de filtration, consignes Redox, mode électrolyseur
+- Diagnostics système : uptime (en secondes), RSSI, état connexion, bouton reboot
+
+Les sections pH, Redox, Booster et Électrolyseur+Redox se masquent automatiquement si les entités correspondantes sont absentes (compatibilité avec tous les presets, du `salt_minimal` au `salt_booster_full`).
+
+> **Adapter au device name :** si votre ESP ne s'appelle pas `frangipool`, remplacez toutes les occurrences de `frangipool` par votre device name (tirets → underscores dans les entity IDs HA).
+> **Uptime :** affiché en secondes brutes — HA ne supporte pas de formatage natif durée pour les capteurs de ce type.
+
 ## Intégration Home Assistant
 
 Home Assistant reste utile pour superviser l'état de l'ESP, recevoir les notifications (antigel, calibration) et ajuster les paramètres. Mais **aucune automatisation HA n'est nécessaire** pour que la filtration fonctionne.
