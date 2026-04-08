@@ -91,6 +91,27 @@ Tous les paramètres sont persistants (conservés après coupure de courant) et 
 
 Le mode antigel est indépendant du planning de filtration. Si la température du tuyau passe sous le seuil antigel, la pompe démarre immédiatement, quel que soit le mode ou l'heure.
 
+### Mode forcé (traitement ponctuel)
+
+Pour les traitements ponctuels (choc chloré, algicide, floculant), trois boutons permettent de forcer la pompe en marche pendant une durée fixe, **quel que soit le mode ou l'heure planifiée**, puis de revenir automatiquement à la planification normale.
+
+| Bouton | Durée | Usage typique |
+| ------ | ----- | ------------- |
+| **Forcer Filtration 2h** | 2 heures | Ajout rapide de produit, brassage post-traitement |
+| **Forcer Filtration 6h** | 6 heures | Traitement algicide ou floculant |
+| **Forcer Filtration 24h** | 24 heures | Choc chloré, remise en route de la piscine |
+| **Arrêter Mode Forcé** | — | Annule immédiatement le mode forcé |
+
+**Comportement :**
+
+- La pompe démarre **immédiatement** à l'appui du bouton, sans attendre le prochain tick de 30 s.
+- Le mode forcé est **prioritaire sur tout** : il s'applique même si le Mode Filtration est réglé sur Off.
+- Appuyer sur un preset pendant qu'un autre est actif **repart du compte depuis maintenant** (pas d'empilement).
+- À expiration, la pompe revient sous contrôle de la planification normale dans les 30 secondes.
+- Le mode forcé **ne persiste pas au redémarrage** de l'ESP.
+
+Le capteur diagnostique **Mode Forcé — Temps restant** affiche le temps restant (ex. `2h 30min`) ou `Inactif`.
+
 ## Interface web locale
 
 L'ESP expose une interface web sur le **port 80** (`http://<ip-de-lesp>`), accessible sans Home Assistant. Elle permet de consulter l'état des capteurs et de modifier tous les paramètres de filtration.
