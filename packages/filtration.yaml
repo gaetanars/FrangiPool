@@ -276,8 +276,10 @@ text_sensor:
       char buf[20];
       if (h > 0) {
         snprintf(buf, sizeof(buf), "%dh %dmin", h, m);
-      } else {
+      } else if (m > 0) {
         snprintf(buf, sizeof(buf), "%dmin", m);
+      } else {
+        return {"< 1min"};
       }
       return {buf};
 
