@@ -125,7 +125,7 @@ Disponibles selon le preset :
 | **Consigne Antigel** | Seuil de température antigel (sonde tuyau). La pompe s'active 1 °C en dessous du seuil |
 | **Délais mesures** | Durée minimale de pompage avant d'enregistrer la température et les valeurs Redox |
 | **Mode Électrolyseur** | Off / Auto / Forcé |
-| **Consigne Redox Max / Min** | Seuils Redox (mV) pour l'auto-régulation |
+| **Consigne Redox** | Seuil Redox cible (mV) — l'électrolyseur s'active à -30 mV et se coupe à la consigne |
 | **Mode Surpresseur** | Off / Auto / Forcé |
 | **Calibration Redox 225mV / 475mV** | Calibration de la sonde Redox dans une solution étalon |
 | **Réinitialisation calibration Redox** | Remet l'offset de calibration à 0 |

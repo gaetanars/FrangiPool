@@ -24,7 +24,7 @@ select:
           } else if (id(electrolyser_mode).state == "Forcé") {
             id(electrolyser).turn_on();
           } else {
-            if (id(pool_redox).state > id(max_redox).state) {
+            if (id(pool_redox).state > id(redox_setpoint).state) {
               id(electrolyser).turn_off();
             } else {
               id(electrolyser).turn_on();
@@ -33,41 +33,28 @@ select:
 
 number:
   - platform: template
-    name: Consigne Redox Max
-    id: max_redox
+    name: Consigne Redox
+    id: redox_setpoint
     optimistic: True
     unit_of_measurement: mV
     device_class: voltage
     step: 10
-    min_value: 670
-    max_value: 750
+    min_value: 680
+    max_value: 760
     restore_value: True
-    initial_value: 740
-    entity_category: config
-
-  - platform: template
-    name: Consigne Redox Min
-    id: min_redox
-    optimistic: True
-    unit_of_measurement: mV
-    device_class: voltage
-    step: 10
-    min_value: 650
-    max_value: 730
-    restore_value: True
-    initial_value: 710
+    initial_value: 730
     entity_category: config
 
 sensor:
   - id: !extend pool_redox
     on_value_range:
-      - above: !lambda return id(max_redox).state;
+      - above: !lambda return id(redox_setpoint).state;
         then:
           - lambda: |-
               if (id(electrolyser_mode).state == "Auto") {
                 id(electrolyser).turn_off();
               }
-      - below: !lambda return id(min_redox).state;
+      - below: !lambda return id(redox_setpoint).state - 30;
         then:
           - lambda: |-
               if (id(electrolyser_mode).state == "Auto") {
@@ -95,8 +82,8 @@ interval:
           }
 
           float current = id(pool_redox).state;
-          float minr = id(min_redox).state;
-          float maxr = id(max_redox).state;
+          float minr = id(redox_setpoint).state - 30;
+          float maxr = id(redox_setpoint).state;
           int stable_minutes = id(redox_stable_minutes);
 
           if ((current > maxr) && (id(electrolyser).state)) {

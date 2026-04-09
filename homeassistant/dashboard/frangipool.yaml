@@ -332,10 +332,8 @@ views:
                 - entity: select.frangipool_mode_electrolyseur
                   name: Mode Électrolyseur
                 # Consignes de régulation (distinct des plages d'affichage du graphique)
-                - entity: number.frangipool_consigne_redox_min
-                  name: Consigne Redox Min (mV)
-                - entity: number.frangipool_consigne_redox_max
-                  name: Consigne Redox Max (mV)
+                - entity: number.frangipool_consigne_redox
+                  name: Consigne Redox (mV)
 
           # ==============================================================
           # SECTION 5 — DIAGNOSTICS
