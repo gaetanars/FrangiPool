@@ -1,64 +1,64 @@
 globals:
   - id: g_h_debut1
     type: int
-    restore_value: false
+    restore_value: False
     initial_value: '0'
   - id: g_h_fin1
     type: int
-    restore_value: false
+    restore_value: False
     initial_value: '0'
   - id: g_h_debut2
     type: int
-    restore_value: false
+    restore_value: False
     initial_value: '0'
   - id: g_h_fin2
     type: int
-    restore_value: false
+    restore_value: False
     initial_value: '0'
   # true = logique Hiver, false = logique Courbe (sub-mode du mode Auto)
   # restore_value: true — conserve l'état saisonnier entre les redémarrages pour que
   # l'hystérésis ne reparte pas de zéro à chaque coupure de courant.
   - id: g_auto_submode
     type: bool
-    restore_value: true
+    restore_value: True
     initial_value: 'false'
   # true = premier calcul déjà effectué (désactive le seuil d'init à 16 °C)
   - id: g_auto_initialized
     type: bool
-    restore_value: true
+    restore_value: True
     initial_value: 'false'
   - id: g_ntp_alert_sent
     type: bool
-    restore_value: false
+    restore_value: False
     initial_value: 'false'
   # 0 = hors cycle, 1 = cycle matin, 2 = cycle soir
   - id: g_cycle_phase
     type: int
-    restore_value: false
+    restore_value: False
     initial_value: '0'
   # Durée totale calculée (minutes/jour) — exposée comme sensor diagnostique
   - id: g_dur_total_min
     type: int
-    restore_value: false
+    restore_value: False
     initial_value: '0'
   # Secondes restantes en mode forcé (décrémenté de 30 à chaque tick de l'intervalle).
   # restore_value: false garantit la non-persistance au reboot (R8).
   - id: g_forced_remaining_s
     type: int
-    restore_value: false
+    restore_value: False
     initial_value: '0'
 
 select:
   - platform: template
     name: Mode Filtration
     id: filtration_mode
-    optimistic: true
+    optimistic: True
     options:
       - "Off"
       - "Hiver"
       - "Courbe"
       - "Auto"
-    restore_value: true
+    restore_value: True
     initial_option: "Auto"
     entity_category: config
     icon: mdi:pool
@@ -70,12 +70,12 @@ number:
   - platform: template
     name: Coefficient Filtration
     id: filtration_coeff
-    optimistic: true
+    optimistic: True
     unit_of_measurement: "%"
     step: 5
     min_value: 50
     max_value: 150
-    restore_value: true
+    restore_value: True
     initial_value: 100
     entity_category: config
     on_value:
@@ -85,12 +85,12 @@ number:
   - platform: template
     name: Durée Pause Filtration
     id: filtration_pause
-    optimistic: true
+    optimistic: True
     unit_of_measurement: "h"
     step: 0.5
     min_value: 0
     max_value: 12
-    restore_value: true
+    restore_value: True
     initial_value: 8
     entity_category: config
     on_value:
@@ -100,12 +100,12 @@ number:
   - platform: template
     name: Ratio Matin Filtration
     id: filtration_ratio_matin
-    optimistic: true
+    optimistic: True
     unit_of_measurement: "%"
     step: 5
     min_value: 20
     max_value: 50
-    restore_value: true
+    restore_value: True
     initial_value: 33
     entity_category: config
     on_value:
@@ -115,12 +115,12 @@ number:
   - platform: template
     name: Durée Hiver Min
     id: filtration_hiver_min
-    optimistic: true
+    optimistic: True
     unit_of_measurement: "h"
     step: 0.5
     min_value: 0
     max_value: 12
-    restore_value: true
+    restore_value: True
     initial_value: 3
     entity_category: config
     on_value:
@@ -130,11 +130,11 @@ number:
   - platform: template
     name: Diviseur Hiver
     id: filtration_diviseur
-    optimistic: true
+    optimistic: True
     step: 0.5
     min_value: 1
     max_value: 5
-    restore_value: true
+    restore_value: True
     initial_value: 3
     entity_category: config
     on_value:
@@ -146,8 +146,8 @@ datetime:
     type: time
     name: Heure Pivot Filtration
     id: filtration_pivot
-    optimistic: true
-    restore_value: true
+    optimistic: True
+    restore_value: True
     initial_value: "13:30:00"
     entity_category: config
     on_value:
@@ -209,6 +209,7 @@ button:
       then:
         - lambda: |-
             id(g_forced_remaining_s) = 0;
+            id(pump).turn_off();
             id(forced_countdown).update();
 
 sensor:
@@ -244,7 +245,7 @@ text_sensor:
     id: filtration_phase
     entity_category: diagnostic
     icon: mdi:state-machine
-    update_interval: 30s
+    update_interval: never
     lambda: |-
       switch (id(g_cycle_phase)) {
         case 1:  return {"Cycle matin"};
@@ -477,14 +478,20 @@ interval:
 
           // Cycle matin (phase 1)
           if (current_min >= id(g_h_debut1) && current_min < id(g_h_fin1)) {
-            id(g_cycle_phase) = 1;
+            if (id(g_cycle_phase) != 1) {
+              id(g_cycle_phase) = 1;
+              id(filtration_phase).update();
+            }
             id(pump).turn_on();
             return;
           }
 
           // Cycle soir (phase 2)
           if (current_min >= id(g_h_debut2) && current_min < id(g_h_fin2)) {
-            id(g_cycle_phase) = 2;
+            if (id(g_cycle_phase) != 2) {
+              id(g_cycle_phase) = 2;
+              id(filtration_phase).update();
+            }
             id(pump).turn_on();
             return;
           }
@@ -493,11 +500,13 @@ interval:
           if (id(g_cycle_phase) == 2) {
             // Fin cycle soir → recalcul pour le lendemain
             id(g_cycle_phase) = 0;
+            id(filtration_phase).update();
             // Garde mode forcé : recalcul uniquement si aucun mode forcé n'est actif
             if (id(g_forced_remaining_s) == 0) id(_calcul_filtration).execute();
           } else if (id(g_cycle_phase) == 1) {
             // Entrée pause → recalcul avec T post-matin pour dimensionner le cycle soir
             id(g_cycle_phase) = 0;
+            id(filtration_phase).update();
             // Garde mode forcé : recalcul uniquement si aucun mode forcé n'est actif
             if (id(g_forced_remaining_s) == 0) id(_calcul_filtration).execute();
           }

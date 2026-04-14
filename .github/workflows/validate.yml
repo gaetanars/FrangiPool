@@ -23,7 +23,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install ESPHome
-        run: pip install esphome
+        run: pip install "esphome==2026.3.3"  # pin to tested version — update when upgrading locally
 
       - name: Override remote packages with local files
         # Remplace github://frangipool/esphome-config/packages/X.yaml@main par !include packages/X.yaml
