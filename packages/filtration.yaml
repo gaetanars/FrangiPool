@@ -418,6 +418,15 @@ script:
           id(g_h_debut1) = h_debut1; id(g_h_fin1) = h_fin1;
           id(g_h_debut2) = h_debut2; id(g_h_fin2) = h_fin2;
 
+          // Validation : fenêtre vide si clampage excessif (pivot/pause mal configurés).
+          // Ex. pivot=00:30 + pause=6h → pause_start clampé à 0 → h_fin1=0=h_debut1.
+          if (h_debut1 >= h_fin1)
+            ESP_LOGE("filtration", "Fenêtre matin invalide [%02d:%02d-%02d:%02d) — vérifiez Heure Pivot et Durée Pause",
+              h_debut1/60, h_debut1%60, h_fin1/60, h_fin1%60);
+          if (h_debut2 >= h_fin2)
+            ESP_LOGE("filtration", "Fenêtre soir invalide [%02d:%02d-%02d:%02d) — vérifiez Heure Pivot et Durée Pause",
+              h_debut2/60, h_debut2%60, h_fin2/60, h_fin2%60);
+
           ESP_LOGI("filtration",
             "Calcul: T=%.1f°C mode=%s dur=%dmin matin:[%02d:%02d-%02d:%02d] soir:[%02d:%02d-%02d:%02d]",
             t, mode.c_str(), dur_total_min,
@@ -433,7 +442,17 @@ interval:
   - interval: 30s
     then:
       - lambda: |-
-          // Antigel prioritaire — vérifié EN PREMIER, avant tout garde NTP.
+          // Mode forcé — décrémenté EN PREMIER, avant le bloc antigel.
+          // Garantit que le compteur s'écoule même si l'antigel est actif simultanément
+          // (ex. nuit froide pendant un traitement 24 h) : sans ce décrément préalable,
+          // l'antigel absorbait tous les ticks et le mode forcé ne se terminait jamais.
+          if (id(g_forced_remaining_s) > 0) {
+            id(g_forced_remaining_s) -= 30;
+            if (id(g_forced_remaining_s) < 0) id(g_forced_remaining_s) = 0;
+            id(forced_countdown).update();
+          }
+
+          // Antigel prioritaire — vérifié avant le garde NTP.
           // La protection antigel est indépendante de l'heure : la pompe doit tourner
           // même si HA est indisponible et l'heure non synchronisée.
           if (id(antifreeze).state) {
@@ -441,14 +460,9 @@ interval:
             return;
           }
 
-          // Mode forcé — vérifié avant le garde NTP pour fonctionner sans synchronisation.
-          // Décrémente le compteur de 30 s à chaque tick, maintient la pompe ON, puis
-          // rend la main à la planification une fois le compteur épuisé.
+          // Mode forcé — maintient la pompe ON (compteur déjà décrémenté ci-dessus).
           if (id(g_forced_remaining_s) > 0) {
-            id(g_forced_remaining_s) -= 30;
-            if (id(g_forced_remaining_s) < 0) id(g_forced_remaining_s) = 0;
             id(pump).turn_on();
-            id(forced_countdown).update();
             return;
           }
 
