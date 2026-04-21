@@ -170,11 +170,9 @@ button:
     entity_category: config
     icon: mdi:timer-2
     on_press:
-      then:
-        - lambda: |-
-            id(g_forced_remaining_s) = 2 * 3600;
-            id(pump).turn_on();
-            id(forced_countdown).update();
+      - script.execute:
+          id: _start_forced_mode
+          hours: 2
 
   - platform: template
     name: "Forcer Filtration 6h"
@@ -182,11 +180,9 @@ button:
     entity_category: config
     icon: mdi:timer-6
     on_press:
-      then:
-        - lambda: |-
-            id(g_forced_remaining_s) = 6 * 3600;
-            id(pump).turn_on();
-            id(forced_countdown).update();
+      - script.execute:
+          id: _start_forced_mode
+          hours: 6
 
   - platform: template
     name: "Forcer Filtration 24h"
@@ -194,11 +190,9 @@ button:
     entity_category: config
     icon: mdi:timer-24
     on_press:
-      then:
-        - lambda: |-
-            id(g_forced_remaining_s) = 24 * 3600;
-            id(pump).turn_on();
-            id(forced_countdown).update();
+      - script.execute:
+          id: _start_forced_mode
+          hours: 24
 
   - platform: template
     name: "Arrêter Mode Forcé"
@@ -206,11 +200,9 @@ button:
     entity_category: config
     icon: mdi:timer-off-outline
     on_press:
-      then:
-        - lambda: |-
-            id(g_forced_remaining_s) = 0;
-            id(pump).turn_off();
-            id(forced_countdown).update();
+      - script.execute:
+          id: _start_forced_mode
+          hours: 0
 
 sensor:
   - platform: template
@@ -309,6 +301,20 @@ script:
             title: "${friendly_name} - Heure"
             message: "Heure non synchronisée avec Home Assistant. Pompe à l'arrêt."
       - lambda: 'id(g_ntp_alert_sent) = true;'
+
+  # Démarre ou arrête un mode forcé. hours=0 annule et coupe la pompe ; hours>0 active
+  # et rallume la pompe immédiatement. Centralise les effets de bord (timer, pompe,
+  # sensor countdown) pour que toute évolution future (log, notification HA) n'ait à
+  # être ajoutée qu'une seule fois.
+  - id: _start_forced_mode
+    parameters:
+      hours: int
+    then:
+      - lambda: |-
+          id(g_forced_remaining_s) = hours * 3600;
+          if (hours > 0) id(pump).turn_on();
+          else           id(pump).turn_off();
+          id(forced_countdown).update();
 
   # mode: queued, max_runs: 1 est intentionnel : absorbe les rafales de déclencheurs
   # simultanés (on_value de plusieurs entités, on_time_sync, fin-de-cycle) en une seule
