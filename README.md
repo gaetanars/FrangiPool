@@ -47,6 +47,46 @@ substitutions:
 
 **Trouver les adresses Dallas :** flasher avec les adresses `0x0000000000000000`, connecter via USB et ouvrir les logs ESPHome. Le scan du bus 1-Wire affiche les adresses découvertes au démarrage.
 
+## Secrets
+
+L'API ESPHome, l'OTA, le WiFi principal et l'AP de secours exigent des secrets définis dans un fichier `secrets.yaml` local (gitignored). Un modèle `secrets.example.yaml` est fourni à la racine du repo.
+
+### Mise en place
+
+1. Copier `secrets.example.yaml` en `secrets.yaml` à la racine du repo (même dossier que les presets `salt_*.yaml`).
+2. Générer une clé API ESPHome fraîche — exactement 32 octets base64 :
+
+   ```bash
+   openssl rand -base64 32
+   ```
+
+   Sur Windows sans `openssl` :
+
+   ```bash
+   python -c "import secrets,base64; print(base64.b64encode(secrets.token_bytes(32)).decode())"
+   ```
+
+3. Remplir `wifi_ssid`, `wifi_password`, `ap_password` (≥ 8 caractères), `api_encryption_key` (clé générée ci-dessus), `ota_password`.
+4. Adopter le device dans Home Assistant en renseignant la `api_encryption_key` lorsque HA la demande.
+
+> **Dashboard ESPHome :** si tu passes par `dashboard_import` (import via URL depuis le tableau de bord ESPHome), le fichier `secrets.yaml` doit se trouver dans le dossier de config de ton dashboard, pas dans ce repo. L'éditeur propose une entrée « Secrets » pour y accéder.
+
+### Premier flash
+
+Improv (WiFi provisioning BLE/série) a été retiré pour réduire la surface d'attaque. **Le premier flash doit se faire par USB** avec `secrets.yaml` prêt. Les mises à jour ultérieures peuvent se faire par OTA (authentifié via `ota_password`).
+
+### Perte de `secrets.yaml`
+
+`secrets.yaml` n'est pas committé. S'il est perdu :
+
+- Regénérer une nouvelle `api_encryption_key` et un nouveau `ota_password`.
+- Reflasher le device par USB.
+- Re-adopter le device dans Home Assistant avec la nouvelle clé.
+
+### Secours WiFi (captive portal)
+
+Si le WiFi domestique est injoignable, l'ESP démarre un point d'accès `${friendly_name} Fallback Hotspot` protégé par `ap_password`. Une fois connecté à cet AP, ouvre `http://192.168.4.1/` pour saisir de nouveaux identifiants WiFi. Le captive portal expose aussi un endpoint OTA — d'où l'importance d'un `ap_password` fort.
+
 ## Filtration autonome
 
 L'ESP calcule lui-même les horaires de filtration en fonction de la température de la piscine. La pompe démarre et s'arrête sans aucune action de Home Assistant.
@@ -112,10 +152,6 @@ Pour les traitements ponctuels (choc chloré, algicide, floculant), trois bouton
 
 Le capteur diagnostique **Mode Forcé — Temps restant** affiche le temps restant (ex. `2h 30min`) ou `Inactif`.
 
-## Interface web locale
-
-L'ESP expose une interface web sur le **port 80** (`http://<ip-de-lesp>`), accessible sans Home Assistant. Elle permet de consulter l'état des capteurs et de modifier tous les paramètres de filtration.
-
 ## Autres entités de configuration
 
 Disponibles selon le preset :
@@ -167,7 +203,7 @@ Pour les utilisateurs souhaitant composer une configuration personnalisée :
 
 | Package | Description |
 | --------- | ----------- |
-| `packages/base.yaml` | Pompe (GPIO25), capteurs Dallas (GPIO23), antigel, interface web port 80, API/OTA/Improv, LED de statut |
+| `packages/base.yaml` | Pompe (GPIO25), capteurs Dallas (GPIO23), antigel, API chiffrée, OTA passwordé, captive portal, LED de statut |
 | `packages/filtration.yaml` | Gestion autonome de la filtration : modes Off/Hiver/Courbe/Auto, deux cycles journaliers, calcul des horaires |
 | `packages/i2c_ads1115.yaml` | Bus I2C (GPIO21/22) et ADC ADS1115 à l'adresse 0x48 |
 | `packages/electrolyser.yaml` | Relais électrolyseur (GPIO27), compteur de minutes d'électrolyse |

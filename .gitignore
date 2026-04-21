@@ -1,3 +1,5 @@
 .esphome
 CLAUDE.md
 docs/
+secrets.yaml
+todos/

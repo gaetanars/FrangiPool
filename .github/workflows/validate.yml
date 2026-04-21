@@ -32,5 +32,10 @@ jobs:
           sed -i 's|github://frangipool/esphome-config/packages/\(.*\)\.yaml@main|!include packages/\1.yaml|g' \
             ${{ matrix.config }}
 
+      - name: Seed secrets.yaml from example
+        # `esphome config` résout les !secret et n'offre pas de flag pour les ignorer.
+        # On copie l'exemple (valeurs factices mais conformes : clé API 32 bytes base64, AP password >=8 chars).
+        run: cp secrets.example.yaml secrets.yaml
+
       - name: Validate ${{ matrix.config }}
         run: esphome config ${{ matrix.config }}
