@@ -153,7 +153,6 @@ button:
   - platform: template
     name: "Forcer Filtration 2h"
     id: filtration_force_2h
-    entity_category: config
     icon: mdi:timer-2
     on_press:
       - script.execute:
@@ -163,7 +162,6 @@ button:
   - platform: template
     name: "Forcer Filtration 6h"
     id: filtration_force_6h
-    entity_category: config
     icon: mdi:timer-6
     on_press:
       - script.execute:
@@ -173,7 +171,6 @@ button:
   - platform: template
     name: "Forcer Filtration 24h"
     id: filtration_force_24h
-    entity_category: config
     icon: mdi:timer-24
     on_press:
       - script.execute:
@@ -183,7 +180,6 @@ button:
   - platform: template
     name: "Arrêter Mode Forcé"
     id: filtration_force_stop
-    entity_category: config
     icon: mdi:timer-off-outline
     on_press:
       - script.execute:
@@ -200,8 +196,17 @@ sensor:
     icon: mdi:timer-outline
     update_interval: never
     lambda: |-
-      // Somme des deux fenêtres de pompage (après clamping).
       return (float)((id(g_h_fin1) - id(g_h_debut1)) + (id(g_h_fin2) - id(g_h_debut2)));
+
+  - platform: template
+    name: "Mode Forcé — Secondes restantes"
+    id: forced_remaining_seconds
+    unit_of_measurement: "s"
+    state_class: measurement
+    entity_category: diagnostic
+    icon: mdi:timer-sand
+    update_interval: never
+    lambda: 'return (float)id(g_forced_remaining_s);'
 
 text_sensor:
   - platform: template
@@ -252,22 +257,16 @@ text_sensor:
       int s = id(g_forced_remaining_s);
       if (s <= 0) return {"Inactif"};
       int h = s / 3600;
-      int m = (s % 3600) / 60;
+      int m = (s % 3600 + 59) / 60;  // round up so we never show 0min while active
       char buf[20];
-      if (h > 0) {
-        snprintf(buf, sizeof(buf), "%dh %dmin", h, m);
-      } else if (m > 0) {
-        snprintf(buf, sizeof(buf), "%dmin", m);
-      } else {
-        return {"< 1min"};
-      }
+      if (h > 0) snprintf(buf, sizeof(buf), "%dh %dmin", h, m);
+      else       snprintf(buf, sizeof(buf), "%dmin", m);
       return {buf};
 
 time:
   - id: !extend esptime
     on_time_sync:
       # Premier calcul après synchronisation NTP (boot ou re-sync périodique).
-      # mode: queued absorbe les re-syncs multiples sans accumulation.
       then:
         - script.execute: _calcul_filtration
     on_time:
@@ -276,23 +275,25 @@ time:
           - script.execute: _calcul_filtration
 
 script:
-  # Alerte NTP envoyée une seule fois par épisode (via g_ntp_alert_sent guard dans l'interval).
-  # L'action HA est tentée EN PREMIER ; le flag n'est posé qu'après pour ne pas bloquer
-  # définitivement l'alerte si HA est temporairement indisponible au moment de l'appel.
+  # Alerte NTP envoyée une seule fois par épisode. Le flag n'est posé que si l'API HA
+  # est joignable au moment de l'appel — sinon on réessaiera au prochain tick.
   - id: _ntp_alert_once
     mode: single
     then:
-      - homeassistant.action:
-          action: persistent_notification.create
-          data:
-            title: "${friendly_name} - Heure"
-            message: "Heure non synchronisée avec Home Assistant. Pompe à l'arrêt."
-      - lambda: 'id(g_ntp_alert_sent) = true;'
+      - if:
+          condition:
+            api.connected:
+          then:
+            - homeassistant.action:
+                action: persistent_notification.create
+                data:
+                  title: "${friendly_name} - Heure"
+                  message: "Heure non synchronisée avec Home Assistant. Pompe à l'arrêt."
+            - lambda: 'id(g_ntp_alert_sent) = true;'
 
-  # Démarre ou arrête un mode forcé. hours=0 annule et coupe la pompe ; hours>0 active
-  # et rallume la pompe immédiatement. Centralise les effets de bord (timer, pompe,
-  # sensor countdown) pour que toute évolution future (log, notification HA) n'ait à
-  # être ajoutée qu'une seule fois.
+  # Démarre ou arrête un mode forcé. hours=0 arme le compteur à 0 (le prochain tick
+  # de l'interval décidera de la pompe selon schedule/antigel) ; hours>0 active et
+  # rallume la pompe immédiatement.
   - id: _start_forced_mode
     parameters:
       hours: int
@@ -303,16 +304,14 @@ script:
           int h = hours < 0 ? 0 : (hours > 24 ? 24 : hours);
           id(g_forced_remaining_s) = h * 3600;
           if (h > 0) id(pump).turn_on();
-          else       id(pump).turn_off();
           id(forced_countdown).update();
+          id(forced_remaining_seconds).update();
 
-  # mode: queued, max_runs: 1 est intentionnel : absorbe les rafales de déclencheurs
-  # simultanés (on_value de plusieurs entités, on_time_sync, fin-de-cycle) en une seule
-  # exécution. Ne pas passer à mode: single qui ignorerait les appels pendant l'exécution,
-  # ni à mode: restart qui annulerait un calcul en cours.
+  # mode: restart — chaque nouveau trigger annule le calcul en cours ; le script est
+  # pur (écrit les globals + component.update en queue de lambda), donc l'annulation
+  # est sûre.
   - id: _calcul_filtration
-    mode: queued
-    max_runs: 1
+    mode: restart
     then:
       - lambda: |-
           // 1439 = 23 h 59 — dernière minute de la journée (minutes-depuis-minuit).
@@ -338,17 +337,11 @@ script:
           bool temp_valid = !std::isnan(t);
           if (!temp_valid) t = 10.0f;
 
-          // NaN guards pour les number templates (optimistic + restore_value peuvent
-          // renvoyer NaN si NVS est corrompu ou la partition déplacée, avant restauration
-          // de initial_value). Fallbacks = initial_value de chaque template.
-          auto safe_f = [](float v, float fallback) { return std::isnan(v) ? fallback : v; };
-          float coeff   = safe_f(id(filtration_coeff).state,       100.0f);
-          float ratio   = safe_f(id(filtration_ratio_matin).state,  33.0f);
-          float pause_h = safe_f(id(filtration_pause).state,         8.0f);
-          float hmin    = safe_f(id(filtration_hiver_min).state,     3.0f);
-          float divisr  = safe_f(id(filtration_diviseur).state,      3.0f);
-          // Protection supplémentaire contre un diviseur trop faible (div-par-zéro).
-          if (divisr < 0.5f) divisr = 3.0f;
+          float coeff   = id(filtration_coeff).state;
+          float ratio   = id(filtration_ratio_matin).state;
+          float pause_h = id(filtration_pause).state;
+          float hmin    = id(filtration_hiver_min).state;
+          float divisr  = id(filtration_diviseur).state;
 
           // --- Calcul durée totale ---
           float duree_h = 0.0f;
@@ -403,10 +396,6 @@ script:
           duree_h *= coeff / 100.0f;
           if (duree_h < 0.0f) duree_h = 0.0f;
           int dur_total_min = (int)(duree_h * 60.0f);
-          // Clamp symétrique : le cast (int) sur NaN est implementation-defined (Xtensa
-          // peut retourner INT_MIN). Le lower clamp garantit qu'on reste dans [0, MAX_MIN]
-          // même si un NaN a échappé aux guards précédents.
-          if (dur_total_min < 0)       dur_total_min = 0;
           if (dur_total_min > MAX_MIN) dur_total_min = MAX_MIN;
 
           // Répartition matin/soir
@@ -414,10 +403,7 @@ script:
           int dur_soir_min  = dur_total_min - dur_matin_min;
 
           // Pivot et pause (en minutes depuis minuit).
-          // filtration_pivot.hour/.minute sont uint8_t (pas de NaN possible), mais un
-          // NVS corrompu peut donner des valeurs hors plage. Clamp défensif au cas où.
           int pivot_min = id(filtration_pivot).hour * 60 + id(filtration_pivot).minute;
-          if (pivot_min < 0 || pivot_min >= MAX_MIN) pivot_min = 13 * 60 + 30;
           int pause_min = (int)(pause_h * 60.0f);
           // pause=0 → pause_start == pause_end == pivot : cycles contigus
           int pause_start = pivot_min - pause_min / 2;
@@ -461,6 +447,7 @@ script:
       - component.update: filtration_duree_totale
       - component.update: filtration_horaires
       - component.update: filtration_auto_mode_actif
+      - component.update: filtration_phase
 
 interval:
   - interval: 30s
@@ -477,6 +464,7 @@ interval:
             // Expiration (0) : % 60 == 0 déclenche aussi le dernier update vers "Inactif".
             if (id(g_forced_remaining_s) % 60 == 0) {
               id(forced_countdown).update();
+              id(forced_remaining_seconds).update();
             }
           }
 
@@ -494,6 +482,16 @@ interval:
             return;
           }
 
+          // Mode Off — ne dépend pas de l'heure, donc vérifié avant le garde NTP.
+          if (id(filtration_mode).state == "Off") {
+            if (id(g_cycle_phase) != 0) {
+              id(g_cycle_phase) = 0;
+              id(filtration_phase).update();
+            }
+            id(pump).turn_off();
+            return;
+          }
+
           auto now = id(esptime).now();
 
           // Guard NTP : sans heure valide, impossible de respecter le planning.
@@ -505,16 +503,7 @@ interval:
             id(pump).turn_off();
             return;
           }
-          if (id(g_ntp_alert_sent)) {
-            id(g_ntp_alert_sent) = false;
-          }
-
-          // Mode Off
-          if (id(filtration_mode).state == "Off") {
-            id(g_cycle_phase) = 0;
-            id(pump).turn_off();
-            return;
-          }
+          id(g_ntp_alert_sent) = false;
 
           int current_min = now.hour * 60 + now.minute;
 
@@ -538,15 +527,8 @@ interval:
             return;
           }
 
-          // Hors fenêtres — on n'arrive ici que si g_forced_remaining_s == 0 déjà
-          // (le early-return plus haut aurait fired sinon), donc le recalc est sûr.
-          if (id(g_cycle_phase) == 2) {
-            // Fin cycle soir → recalcul pour le lendemain
-            id(g_cycle_phase) = 0;
-            id(filtration_phase).update();
-            id(_calcul_filtration).execute();
-          } else if (id(g_cycle_phase) == 1) {
-            // Entrée pause → recalcul avec T post-matin pour dimensionner le cycle soir
+          // Hors fenêtres — fin de cycle matin ou soir → recalcul pour la prochaine fenêtre.
+          if (id(g_cycle_phase) != 0) {
             id(g_cycle_phase) = 0;
             id(filtration_phase).update();
             id(_calcul_filtration).execute();
