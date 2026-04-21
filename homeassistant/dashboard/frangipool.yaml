@@ -41,9 +41,6 @@ views:
               - condition: state
                 entity: switch.frangipool_surpresseur
                 state_not: unavailable
-              - condition: state
-                entity: switch.frangipool_surpresseur
-                state_not: unknown
             card:
               type: entities
               title: Surpresseur
@@ -61,9 +58,6 @@ views:
               - condition: state
                 entity: sensor.frangipool_ph
                 state_not: unavailable
-              - condition: state
-                entity: sensor.frangipool_ph
-                state_not: unknown
             card:
               type: entity
               entity: sensor.frangipool_ph
@@ -76,9 +70,6 @@ views:
               - condition: state
                 entity: sensor.frangipool_redox
                 state_not: unavailable
-              - condition: state
-                entity: sensor.frangipool_redox
-                state_not: unknown
             card:
               type: entity
               entity: sensor.frangipool_redox
@@ -112,9 +103,6 @@ views:
               - condition: state
                 entity: sensor.frangipool_ph
                 state_not: unavailable
-              - condition: state
-                entity: sensor.frangipool_ph
-                state_not: unknown
             card:
               type: custom:apexcharts-card
               # color_threshold colore la ligne selon la valeur courante
@@ -153,36 +141,6 @@ views:
                       color: "#e67e22"    # orange : 7.4 – 7.6
                     - value: 7.6
                       color: "#e74c3c"    # rouge  : > 7.6
-              # Bandes de fond colorées (zones statiques)
-              apex_config:
-                annotations:
-                  position: back
-                  yaxis:
-                    - y: 6.5
-                      y2: 7.0
-                      fillColor: "#e74c3c"
-                      borderColor: "#00000000"
-                      opacity: 0.12
-                    - y: 7.0
-                      y2: 7.2
-                      fillColor: "#e67e22"
-                      borderColor: "#00000000"
-                      opacity: 0.12
-                    - y: 7.2
-                      y2: 7.4
-                      fillColor: "#27ae60"
-                      borderColor: "#00000000"
-                      opacity: 0.12
-                    - y: 7.4
-                      y2: 7.6
-                      fillColor: "#e67e22"
-                      borderColor: "#00000000"
-                      opacity: 0.12
-                    - y: 7.6
-                      y2: 7.8
-                      fillColor: "#e74c3c"
-                      borderColor: "#00000000"
-                      opacity: 0.12
 
           # Graphique Redox — conditionnel
           - type: conditional
@@ -190,9 +148,6 @@ views:
               - condition: state
                 entity: sensor.frangipool_redox
                 state_not: unavailable
-              - condition: state
-                entity: sensor.frangipool_redox
-                state_not: unknown
             card:
               type: custom:apexcharts-card
               experimental:
@@ -227,35 +182,6 @@ views:
                       color: "#e67e22"    # orange : 750 – 800 mV
                     - value: 800
                       color: "#e74c3c"    # rouge  : > 800 mV
-              apex_config:
-                annotations:
-                  position: back
-                  yaxis:
-                    - y: 500
-                      y2: 600
-                      fillColor: "#e74c3c"
-                      borderColor: "#00000000"
-                      opacity: 0.12
-                    - y: 600
-                      y2: 650
-                      fillColor: "#e67e22"
-                      borderColor: "#00000000"
-                      opacity: 0.12
-                    - y: 650
-                      y2: 750
-                      fillColor: "#27ae60"
-                      borderColor: "#00000000"
-                      opacity: 0.12
-                    - y: 750
-                      y2: 800
-                      fillColor: "#e67e22"
-                      borderColor: "#00000000"
-                      opacity: 0.12
-                    - y: 800
-                      y2: 900
-                      fillColor: "#e74c3c"
-                      borderColor: "#00000000"
-                      opacity: 0.12
 
           # Graphique Température — toujours visible
           - type: custom:apexcharts-card
@@ -340,9 +266,6 @@ views:
               - condition: state
                 entity: select.frangipool_mode_electrolyseur
                 state_not: unavailable
-              - condition: state
-                entity: select.frangipool_mode_electrolyseur
-                state_not: unknown
             card:
               type: entities
               title: Électrolyseur & Redox
