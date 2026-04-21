@@ -170,7 +170,6 @@ binary_sensor:
                 Température canalisation : {{ states('sensor.temperature_canalisation') }} °C
     on_release:
       then:
-        - switch.turn_off: pump
         - homeassistant.action:
             action: persistent_notification.create
             data:
@@ -209,14 +208,6 @@ status_led:
     inverted: yes
 
 interval:
-  - interval: 30s
-    then:
-      - if:
-          condition:
-            binary_sensor.is_on: antifreeze
-          then:
-            - switch.turn_on: pump
-
   - interval: 1min
     then:
       - if:
