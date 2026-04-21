@@ -220,6 +220,10 @@ Au boot de l'ESP32, toutes les broches GPIO sont en état HIGH par défaut. Avec
 
 Les broches concernées utilisent `inverted: true` dans ESPHome pour que la logique applicative (ON/OFF) corresponde à l'état physique attendu.
 
+## Conventions
+
+Les globales portées par un package sont préfixées `g_` pour les distinguer des IDs d'entités dans les appels `id()` (ex. `g_pump_last_turn_on`, et non `pump_last_turn_on`). La règle s'applique à tous les packages sous `packages/`. Les globales partagées entre packages (aucune à ce jour) peuvent omettre le préfixe.
+
 ## Configuration avancée
 
 Créer un fichier `ma-piscine.yaml` et composer les packages directement :

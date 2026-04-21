@@ -39,10 +39,10 @@ one_wire:
     pin: GPIO23
 
 globals:
-  - id: pump_last_turn_on
+  - id: g_pump_last_turn_on
     type: int
     restore_value: True
-  - id: store_pool_temp
+  - id: g_store_pool_temp
     type: float
     restore_value: True
 
@@ -111,7 +111,7 @@ sensor:
     id: pool_temp
     accuracy_decimals: 1
     lambda: |-
-      return id(store_pool_temp);
+      return id(g_store_pool_temp);
 
   - platform: template
     name: Pump Uptime
@@ -120,7 +120,7 @@ sensor:
     unit_of_measurement: "min"
     lambda: |-
       if (id(pump).state){
-        return (id(esptime).now().timestamp - id(pump_last_turn_on)) / 60.0;
+        return (id(esptime).now().timestamp - id(g_pump_last_turn_on)) / 60.0;
       } else {
         return 0.0;
       }
@@ -195,7 +195,7 @@ switch:
     on_turn_on:
       then:
         - globals.set:
-            id: pump_last_turn_on
+            id: g_pump_last_turn_on
             value: !lambda "return id(esptime).now().timestamp;"
 
 button:
@@ -217,5 +217,5 @@ interval:
               - lambda: "return id(pump_uptime).state >= id(pump_uptime_delay).state;"
           then:
             - globals.set:
-                id: store_pool_temp
+                id: g_store_pool_temp
                 value: !lambda "return id(pipe_temp).state;"

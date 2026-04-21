@@ -1,8 +1,8 @@
 globals:
-  - id: store_pool_ph
+  - id: g_store_pool_ph
     type: float
     restore_value: True
-  - id: ph_offset
+  - id: g_ph_offset
     type: float
     restore_value: True
 
@@ -22,7 +22,7 @@ sensor:
     id: realtime_ph
     accuracy_decimals: 1
     update_interval: 10s
-    lambda: return 3.56 * id(ads1115_a1).state - 1.889 + id(ph_offset);
+    lambda: return 3.56 * id(ads1115_a1).state - 1.889 + id(g_ph_offset);
     filters:
       - sliding_window_moving_average:
           window_size: 18
@@ -35,13 +35,13 @@ sensor:
     icon: mdi:ph
     id: pool_ph
     accuracy_decimals: 1
-    lambda: return id(store_pool_ph);
+    lambda: return id(g_store_pool_ph);
 
   - platform: template
     name: pH Offset
     entity_category: diagnostic
     id: ph_offset_sensor
-    lambda: return id(ph_offset);
+    lambda: return id(g_ph_offset);
 
 button:
   - platform: template
@@ -50,7 +50,7 @@ button:
     on_press:
       then:
         - globals.set:
-            id: ph_offset
+            id: g_ph_offset
             value: !lambda "return 7.0 - 3.56 * id(ads1115_a1).state + 1.889;"
         - component.update: ph_offset_sensor
         - component.update: realtime_ph
@@ -70,5 +70,5 @@ interval:
                   }
           then:
             - globals.set:
-                id: store_pool_ph
+                id: g_store_pool_ph
                 value: !lambda "return id(realtime_ph).state;"
