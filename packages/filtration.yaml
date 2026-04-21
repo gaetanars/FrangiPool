@@ -337,8 +337,11 @@ script:
           // Température avec fallback NaN → 10 °C
           // Valeur conservatrice : maintient une circulation minimale même sans capteur,
           // sans risquer de surcharger la pompe ni de déclencher une bascule Auto intempestive.
+          // temp_valid est utilisé plus bas en mode Auto pour ne pas verrouiller le submode
+          // saisonnier si le tout premier boot tombe sur un capteur encore non synchronisé.
           float t = id(pool_temp).state;
-          if (std::isnan(t)) t = 10.0f;
+          bool temp_valid = !std::isnan(t);
+          if (!temp_valid) t = 10.0f;
 
           // NaN guards pour les number templates (optimistic + restore_value peuvent
           // renvoyer NaN si NVS est corrompu ou la partition déplacée, avant restauration
@@ -378,9 +381,17 @@ script:
             // g_auto_submode persiste (restore: true) pour conserver l'état saisonnier.
             bool is_hiver = id(g_auto_submode);
             if (!id(g_auto_initialized)) {
-              is_hiver = (t < 16.0f);
-              id(g_auto_submode) = is_hiver;
-              id(g_auto_initialized) = true;
+              if (temp_valid) {
+                is_hiver = (t < 16.0f);
+                id(g_auto_submode) = is_hiver;
+                id(g_auto_initialized) = true;
+              } else {
+                // Tout premier boot avec température invalide (capteur pas encore
+                // synchronisé ou déconnecté) : ne pas verrouiller g_auto_submode sur
+                // le fallback 10 °C. Default transitoire Courbe (sûr pour un déploiement
+                // estival). Le prochain recalc avec temp valide fera l'init réelle.
+                is_hiver = false;
+              }
             } else if (is_hiver && t > 17.0f) {
               is_hiver = false;
               id(g_auto_submode) = false;
