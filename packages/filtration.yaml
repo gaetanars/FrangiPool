@@ -298,9 +298,12 @@ script:
       hours: int
     then:
       - lambda: |-
-          id(g_forced_remaining_s) = hours * 3600;
-          if (hours > 0) id(pump).turn_on();
-          else           id(pump).turn_off();
+          // Clamp [0, 24] : bornes UI. Évite l'overflow de hours*3600 (signed int32
+          // wrap vers 596524) et les verrous pompe multi-jours via appel HA direct.
+          int h = hours < 0 ? 0 : (hours > 24 ? 24 : hours);
+          id(g_forced_remaining_s) = h * 3600;
+          if (h > 0) id(pump).turn_on();
+          else       id(pump).turn_off();
           id(forced_countdown).update();
 
   # mode: queued, max_runs: 1 est intentionnel : absorbe les rafales de déclencheurs

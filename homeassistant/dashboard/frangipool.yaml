@@ -297,8 +297,6 @@ views:
                 name: Ratio Matin (%)
               - entity: number.frangipool_coefficient_filtration
                 name: Coefficient (%)
-              - entity: button.frangipool_recalcul_filtration
-                name: Recalcul
               - entity: number.frangipool_duree_hiver_min
                 name: Durée Hiver Min (h)
               - entity: number.frangipool_diviseur_hiver
@@ -309,6 +307,26 @@ views:
               # Le nom ESPHome contient des parenthèses qui peuvent modifier le slug généré.
               - entity: number.frangipool_delais_mesures_au_lancement_de_la_filtration
                 name: Délai Mesures (min)
+
+          # ==============================================================
+          # SECTION 3b — MODE FORCÉ
+          # Override ponctuel : pompe ON pour une durée fixe, puis reprise du planning.
+          # Le countdown affiche "Inactif" hors mode forcé.
+          # ==============================================================
+
+          - type: entities
+            title: Mode Forcé
+            entities:
+              - entity: sensor.frangipool_mode_force_temps_restant
+                name: Temps restant
+              - entity: button.frangipool_forcer_filtration_2h
+                name: Forcer 2h
+              - entity: button.frangipool_forcer_filtration_6h
+                name: Forcer 6h
+              - entity: button.frangipool_forcer_filtration_24h
+                name: Forcer 24h
+              - entity: button.frangipool_arreter_mode_force
+                name: Arrêter
 
           # ==============================================================
           # SECTION 4 — ÉLECTROLYSEUR & REDOX
