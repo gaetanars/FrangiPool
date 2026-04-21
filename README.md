@@ -9,6 +9,10 @@ Configuration ESPHome pour l'automatisation d'une piscine à sel sur ESP32. La f
 
 PCB disponible : [frangipool/pcb](https://github.com/frangipool/pcb)
 
+## Prérequis
+
+- ESPHome ≥ 2024.6.0 (plateforme `datetime:`) — version épinglée via `esphome.min_version` dans `packages/base.yaml`.
+
 ## Import rapide
 
 1. Ouvrir le tableau de bord ESPHome → **Nouveau périphérique** → **Utiliser un projet**

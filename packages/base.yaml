@@ -4,6 +4,9 @@ substitutions:
   local_temp_address: "0x0000000000000000"
   temp_address: "0x0000000000000000"
 
+esphome:
+  min_version: 2024.6.0
+
 wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
@@ -22,6 +25,17 @@ logger:
 api:
   encryption:
     key: !secret api_encryption_key
+  actions:
+    - action: force_filtration
+      variables:
+        hours: int
+      then:
+        - script.execute:
+            id: _start_forced_mode
+            hours: !lambda "return hours;"
+    - action: recalc_filtration
+      then:
+        - script.execute: _calcul_filtration
 
 ota:
   - platform: esphome
@@ -184,6 +198,7 @@ binary_sensor:
     entity_category: diagnostic
 
 switch:
+  # Scheduler-owned: authoritative writer is packages/filtration.yaml (interval 30s).
   - platform: gpio
     pin:
       number: GPIO25
@@ -192,6 +207,7 @@ switch:
     id: pump
     restore_mode: RESTORE_DEFAULT_OFF
     icon: mdi:engine
+    entity_category: diagnostic
     on_turn_on:
       then:
         - globals.set:
