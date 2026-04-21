@@ -340,6 +340,18 @@ script:
           float t = id(pool_temp).state;
           if (std::isnan(t)) t = 10.0f;
 
+          // NaN guards pour les number templates (optimistic + restore_value peuvent
+          // renvoyer NaN si NVS est corrompu ou la partition déplacée, avant restauration
+          // de initial_value). Fallbacks = initial_value de chaque template.
+          auto safe_f = [](float v, float fallback) { return std::isnan(v) ? fallback : v; };
+          float coeff   = safe_f(id(filtration_coeff).state,       100.0f);
+          float ratio   = safe_f(id(filtration_ratio_matin).state,  33.0f);
+          float pause_h = safe_f(id(filtration_pause).state,         8.0f);
+          float hmin    = safe_f(id(filtration_hiver_min).state,     3.0f);
+          float divisr  = safe_f(id(filtration_diviseur).state,      3.0f);
+          // Protection supplémentaire contre un diviseur trop faible (div-par-zéro).
+          if (divisr < 0.5f) divisr = 3.0f;
+
           // --- Calcul durée totale ---
           float duree_h = 0.0f;
           std::string mode = id(filtration_mode).state;
@@ -358,7 +370,7 @@ script:
           if (mode == "Courbe") {
             duree_h = calc_courbe(t);
           } else if (mode == "Hiver") {
-            duree_h = calc_hiver(t, id(filtration_hiver_min).state, id(filtration_diviseur).state);
+            duree_h = calc_hiver(t, hmin, divisr);
           } else {
             // Mode Auto — hystérésis ±1 °C autour de 16 °C
             // Seuils : bascule Hiver→Courbe à 17 °C, Courbe→Hiver à 15 °C.
@@ -377,24 +389,31 @@ script:
               id(g_auto_submode) = true;
             }
             duree_h = is_hiver
-              ? calc_hiver(t, id(filtration_hiver_min).state, id(filtration_diviseur).state)
+              ? calc_hiver(t, hmin, divisr)
               : calc_courbe(t);
           }
 
           // Appliquer coefficient et clamp [0, MAX_MIN]
-          duree_h *= id(filtration_coeff).state / 100.0f;
+          duree_h *= coeff / 100.0f;
           if (duree_h < 0.0f) duree_h = 0.0f;
           int dur_total_min = (int)(duree_h * 60.0f);
+          // Clamp symétrique : le cast (int) sur NaN est implementation-defined (Xtensa
+          // peut retourner INT_MIN). Le lower clamp garantit qu'on reste dans [0, MAX_MIN]
+          // même si un NaN a échappé aux guards précédents.
+          if (dur_total_min < 0)       dur_total_min = 0;
           if (dur_total_min > MAX_MIN) dur_total_min = MAX_MIN;
           id(g_dur_total_min) = dur_total_min;
 
           // Répartition matin/soir
-          int dur_matin_min = (int)(dur_total_min * id(filtration_ratio_matin).state / 100.0f);
+          int dur_matin_min = (int)(dur_total_min * ratio / 100.0f);
           int dur_soir_min  = dur_total_min - dur_matin_min;
 
-          // Pivot et pause (en minutes depuis minuit)
+          // Pivot et pause (en minutes depuis minuit).
+          // filtration_pivot.hour/.minute sont uint8_t (pas de NaN possible), mais un
+          // NVS corrompu peut donner des valeurs hors plage. Clamp défensif au cas où.
           int pivot_min = id(filtration_pivot).hour * 60 + id(filtration_pivot).minute;
-          int pause_min = (int)(id(filtration_pause).state * 60.0f);
+          if (pivot_min < 0 || pivot_min >= MAX_MIN) pivot_min = 13 * 60 + 30;
+          int pause_min = (int)(pause_h * 60.0f);
           // pause=0 → pause_start == pause_end == pivot : cycles contigus
           int pause_start = pivot_min - pause_min / 2;
           int pause_end   = pivot_min + (pause_min - pause_min / 2); // arrondi correct
