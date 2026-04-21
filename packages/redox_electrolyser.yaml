@@ -1,3 +1,13 @@
+# Politique de régulation asymétrique :
+#   OFF rapide (protection sur-chloration) : on_value_range above setpoint
+#     → l'électrolyseur se coupe dès le franchissement supérieur (réaction en secondes).
+#   ON lent (filtre bruit capteur) : interval 1min + redox_stable_minutes >= 30
+#     → l'électrolyseur ne démarre qu'après 30 min de tendance Redox non-montante
+#       (redox_trend_state <= 0) avec ORP < setpoint - 30 mV. Les dips transitoires
+#       (bruit, agitation) sont ignorés.
+# Le bloc OFF de l'interval sert de filet pour les cas sans franchissement
+# (ex. passage Off → Auto alors qu'ORP est déjà au-dessus du setpoint).
+
 globals:
   - id: redox_stable_minutes
     type: int
@@ -53,14 +63,6 @@ sensor:
           - lambda: |-
               if (id(electrolyser_mode).state == "Auto") {
                 id(electrolyser).turn_off();
-              }
-      - below: !lambda return id(redox_setpoint).state - 30;
-        then:
-          - lambda: |-
-              if (id(electrolyser_mode).state == "Auto") {
-                if (id(redox_trend_state) != 1) {
-                  id(electrolyser).turn_on();
-                }
               }
 
 interval:
