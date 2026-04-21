@@ -13,10 +13,10 @@ esphome:
     version: "2.0.0"
 
 dashboard_import:
-  package_import_url: github://frangipool/esphome-config/salt_booster_minimal.yaml@main
+  package_import_url: github://gaetanars/FrangiPool/salt_booster_minimal.yaml@main
 
 packages:
-  base: github://frangipool/esphome-config/packages/base.yaml@main
-  filtration: github://frangipool/esphome-config/packages/filtration.yaml@main
-  electrolyser: github://frangipool/esphome-config/packages/electrolyser.yaml@main
-  booster: github://frangipool/esphome-config/packages/booster.yaml@main
+  base: github://gaetanars/FrangiPool/packages/base.yaml@main
+  filtration: github://gaetanars/FrangiPool/packages/filtration.yaml@main
+  electrolyser: github://gaetanars/FrangiPool/packages/electrolyser.yaml@main
+  booster: github://gaetanars/FrangiPool/packages/booster.yaml@main

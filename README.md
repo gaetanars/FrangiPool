@@ -2,8 +2,8 @@
 
 [![ESPHome](https://img.shields.io/badge/ESPHome-ESP32-blue?logo=esphome&logoColor=white)](https://esphome.io)
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2024.6%2B-41BDF5?logo=home-assistant&logoColor=white)](https://www.home-assistant.io)
-[![GitHub release](https://img.shields.io/github/v/release/frangipool/esphome-config?label=derni%C3%A8re%20version&color=brightgreen)](https://github.com/frangipool/esphome-config/releases)
-[![GitHub stars](https://img.shields.io/github/stars/frangipool/esphome-config?style=social)](https://github.com/frangipool/esphome-config/stargazers)
+[![GitHub release](https://img.shields.io/github/v/release/gaetanars/FrangiPool?label=derni%C3%A8re%20version&color=brightgreen)](https://github.com/gaetanars/FrangiPool/releases)
+[![GitHub stars](https://img.shields.io/github/stars/gaetanars/FrangiPool?style=social)](https://github.com/gaetanars/FrangiPool/stargazers)
 
 Configuration ESPHome pour l'automatisation d'une piscine à sel sur ESP32. La filtration est gérée directement par l'ESP — calcul des horaires, démarrage et arrêt de la pompe — sans aucune automatisation Home Assistant requise. HA reste utile pour la supervision et les notifications, mais son absence ou son redémarrage n'interrompt pas la filtration.
 
@@ -26,14 +26,14 @@ Choisissez le preset correspondant à votre matériel :
 
 | Preset | Électrolyseur | Redox | pH | Auto-régulation | Surpresseur | URL |
 | -------- | :---: | :---: | :---: | :---: | :---: | --- |
-| `salt_full` | ✓ | ✓ | ✓ | ✓ | — | `github://frangipool/esphome-config/salt_full.yaml@main` |
-| `salt_wo_ph` | ✓ | ✓ | — | ✓ | — | `github://frangipool/esphome-config/salt_wo_ph.yaml@main` |
-| `salt_wo_redox` | ✓ | — | ✓ | — | — | `github://frangipool/esphome-config/salt_wo_redox.yaml@main` |
-| `salt_minimal` | ✓ | — | — | — | — | `github://frangipool/esphome-config/salt_minimal.yaml@main` |
-| `salt_booster_full` | ✓ | ✓ | ✓ | ✓ | ✓ | `github://frangipool/esphome-config/salt_booster_full.yaml@main` |
-| `salt_booster_wo_ph` | ✓ | ✓ | — | ✓ | ✓ | `github://frangipool/esphome-config/salt_booster_wo_ph.yaml@main` |
-| `salt_booster_wo_redox` | ✓ | — | ✓ | — | ✓ | `github://frangipool/esphome-config/salt_booster_wo_redox.yaml@main` |
-| `salt_booster_minimal` | ✓ | — | — | — | ✓ | `github://frangipool/esphome-config/salt_booster_minimal.yaml@main` |
+| `salt_full` | ✓ | ✓ | ✓ | ✓ | — | `github://gaetanars/FrangiPool/salt_full.yaml@main` |
+| `salt_wo_ph` | ✓ | ✓ | — | ✓ | — | `github://gaetanars/FrangiPool/salt_wo_ph.yaml@main` |
+| `salt_wo_redox` | ✓ | — | ✓ | — | — | `github://gaetanars/FrangiPool/salt_wo_redox.yaml@main` |
+| `salt_minimal` | ✓ | — | — | — | — | `github://gaetanars/FrangiPool/salt_minimal.yaml@main` |
+| `salt_booster_full` | ✓ | ✓ | ✓ | ✓ | ✓ | `github://gaetanars/FrangiPool/salt_booster_full.yaml@main` |
+| `salt_booster_wo_ph` | ✓ | ✓ | — | ✓ | ✓ | `github://gaetanars/FrangiPool/salt_booster_wo_ph.yaml@main` |
+| `salt_booster_wo_redox` | ✓ | — | ✓ | — | ✓ | `github://gaetanars/FrangiPool/salt_booster_wo_redox.yaml@main` |
+| `salt_booster_minimal` | ✓ | — | — | — | ✓ | `github://gaetanars/FrangiPool/salt_booster_minimal.yaml@main` |
 
 Tous les presets incluent la gestion autonome de la filtration. **Auto-régulation** : contrôle automatique de l'électrolyseur selon les seuils Redox (nécessite électrolyseur + Redox).
 
@@ -197,7 +197,34 @@ Les sections pH, Redox, Booster et Électrolyseur+Redox se masquent automatiquem
 
 Home Assistant reste utile pour superviser l'état de l'ESP, recevoir les notifications (antigel, calibration) et ajuster les paramètres. Mais **aucune automatisation HA n'est nécessaire** pour que la filtration fonctionne.
 
-> **Migration depuis le blueprint HA :** si vous utilisiez le blueprint `homeassistant/blueprint/frangipool.yaml`, **désactivez ou supprimez l'automation correspondante** avant de déployer ce firmware. Laisser les deux actifs en parallèle provoquerait des conflits sur le contrôle de la pompe.
+### Migration v1.x → v2.0
+
+La v2.0 déplace la planification et les consignes sur l'ESP. Si tu montes depuis la v1.x, prévois les étapes suivantes.
+
+**Blueprint Home Assistant (obsolète).** Le blueprint `homeassistant/blueprint/frangipool.yaml` n'est plus maintenu et est supprimé du dépôt. Avant de flasher la v2.0, ouvre HA → Settings → Automations & Scenes → filtre par blueprint `FrangiPool` → désactive ou supprime les automations correspondantes. Laisser le blueprint actif provoque du pump-chattering : deux sources (blueprint HA + planification ESP) écrivent sur `switch.frangipool_filtration` à chaque limite de cycle.
+
+**Package Home Assistant (obsolète).** Le package HA `homeassistant/package/frangipool.yaml` est également supprimé. Les entités d'aide HA sont remplacées par des entités exposées par l'ESP. Mets à jour tes automations selon la correspondance :
+
+| v1.x (HA helpers) | v2.0 (entités ESP) |
+| --- | --- |
+| `input_select.mode_filtration_piscine` | `select.frangipool_mode_filtration` |
+| `input_datetime.heure_debut_filtration_*` | Plus d'entrée manuelle — les fenêtres sont calculées, exposées via `sensor.frangipool_horaires_filtration` |
+| `input_number.duree_filtration_*` | `number.frangipool_coefficient_filtration` + `number.frangipool_duree_pause_filtration` |
+| `input_button.forcer_filtration` | `button.frangipool_forcer_filtration_2h` / `_6h` / `_24h` ou `force_filtration(hours)` |
+| Template sensors HA | `sensor.frangipool_duree_filtration_journaliere`, `sensor.frangipool_phase_filtration`, `sensor.frangipool_mode_auto_actif` |
+
+**Options du mode filtration.** Les valeurs du select ont changé. ESPHome ignore silencieusement les valeurs inconnues — toute automation HA appelant `select.select_option` avec les anciens libellés ne fera rien.
+
+| v1.x | v2.0 |
+| --- | --- |
+| `Inactif` | `Off` |
+| `Hivernage` | `Hiver` |
+| `Automatique` | `Auto` |
+| `Forcé` | Utiliser l'action API `force_filtration(hours)` ou les boutons Forcer Filtration 2h / 6h / 24h |
+
+**Clé API Home Assistant.** L'API native utilise maintenant le chiffrement Noise (voir section Secrets). Si ton ESP était déjà adopté dans HA, HA le verra comme `unavailable` après le flash. Supprime l'intégration existante (HA → Settings → Devices & Services → ESPHome → sélectionne le device → Delete), puis ré-adopte-le avec la nouvelle `api_encryption_key`. Les `unique_id` ESPHome sont conservés, donc tes dashboards continuent de fonctionner après ré-adoption.
+
+**Consigne Redox.** Les anciens `number.frangipool_consigne_redox_min` / `_max` sont remplacés par un unique `number.frangipool_consigne_redox` (plage 680–760 mV, défaut 730 mV). Mets à jour les automations HA qui référencent les deux anciennes entités.
 
 L'heure est fournie à l'ESP par Home Assistant via l'API locale (pas d'accès internet requis). Si HA est temporairement indisponible au démarrage, la pompe reste à l'arrêt jusqu'à la synchronisation de l'heure.
 
@@ -244,12 +271,12 @@ esphome:
   friendly_name: ${friendly_name}
 
 packages:
-  base: github://frangipool/esphome-config/packages/base.yaml@main
-  filtration: github://frangipool/esphome-config/packages/filtration.yaml@main
-  i2c_ads1115: github://frangipool/esphome-config/packages/i2c_ads1115.yaml@main
-  electrolyser: github://frangipool/esphome-config/packages/electrolyser.yaml@main
-  redox: github://frangipool/esphome-config/packages/redox.yaml@main
-  redox_electrolyser: github://frangipool/esphome-config/packages/redox_electrolyser.yaml@main
+  base: github://gaetanars/FrangiPool/packages/base.yaml@main
+  filtration: github://gaetanars/FrangiPool/packages/filtration.yaml@main
+  i2c_ads1115: github://gaetanars/FrangiPool/packages/i2c_ads1115.yaml@main
+  electrolyser: github://gaetanars/FrangiPool/packages/electrolyser.yaml@main
+  redox: github://gaetanars/FrangiPool/packages/redox.yaml@main
+  redox_electrolyser: github://gaetanars/FrangiPool/packages/redox_electrolyser.yaml@main
 ```
 
 Tous les packages sont téléchargés directement depuis GitHub au moment de la compilation. Pour épingler une version spécifique, remplacer `@main` par un tag (ex : `@v2.0.0`).

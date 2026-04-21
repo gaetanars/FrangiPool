@@ -31,10 +31,11 @@ jobs:
         run: pip install "esphome==2026.3.3"  # pin to tested version — update when upgrading locally
 
       - name: Override remote packages with local files
-        # Remplace github://frangipool/esphome-config/packages/X.yaml@main par !include packages/X.yaml
+        # Remplace github://gaetanars/FrangiPool/packages/X.yaml@main par !include packages/X.yaml
         # afin que la CI valide les packages du commit en cours et non ceux de @main.
+        # NOTE : URL migrée depuis github://frangipool/esphome-config/ vers github://gaetanars/FrangiPool/.
         run: |
-          sed -i 's|github://frangipool/esphome-config/packages/\(.*\)\.yaml@main|!include packages/\1.yaml|g' \
+          sed -i 's|github://gaetanars/FrangiPool/packages/\(.*\)\.yaml@main|!include packages/\1.yaml|g' \
             ${{ matrix.config }}
 
       - name: Seed secrets.yaml from example

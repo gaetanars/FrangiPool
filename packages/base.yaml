@@ -25,17 +25,6 @@ logger:
 api:
   encryption:
     key: !secret api_encryption_key
-  actions:
-    - action: force_filtration
-      variables:
-        hours: int
-      then:
-        - script.execute:
-            id: _start_forced_mode
-            hours: !lambda "return hours;"
-    - action: recalc_filtration
-      then:
-        - script.execute: _calcul_filtration
 
 ota:
   - platform: esphome
@@ -133,11 +122,13 @@ sensor:
     internal: true
     unit_of_measurement: "min"
     lambda: |-
-      if (id(pump).state){
-        return (id(esptime).now().timestamp - id(g_pump_last_turn_on)) / 60.0;
-      } else {
-        return 0.0;
-      }
+      // Premier flash : g_pump_last_turn_on vaut 0 (C++ zero-init), ce qui ferait passer
+      // la garde des 20 min dès le boot. On reporte 0 tant que la pompe n'a jamais été
+      // réellement allumée — le handler on_turn_on du switch écrit un vrai timestamp au
+      // premier démarrage.
+      if (!id(pump).state) return 0.0;
+      if (id(g_pump_last_turn_on) <= 0) return 0.0;
+      return (id(esptime).now().timestamp - id(g_pump_last_turn_on)) / 60.0;
 
   - platform: uptime
     name: Uptime
@@ -159,6 +150,8 @@ binary_sensor:
       static bool state = false;
 
       float t = id(pipe_temp_raw).state;
+      // Capteur Dallas injoignable : préserver l'état précédent plutôt que laisser NaN verrouiller OFF.
+      if (std::isnan(t)) return state;
       float on_threshold  = id(max_antifreeze_temp).state - 1.0;
       float off_threshold = id(max_antifreeze_temp).state;
 
@@ -207,7 +200,6 @@ switch:
     id: pump
     restore_mode: RESTORE_DEFAULT_OFF
     icon: mdi:engine
-    entity_category: diagnostic
     on_turn_on:
       then:
         - globals.set:

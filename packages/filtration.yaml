@@ -31,6 +31,10 @@ globals:
     type: bool
     restore_value: False
     initial_value: 'false'
+  - id: g_invalid_window_alert_sent
+    type: bool
+    restore_value: False
+    initial_value: 'false'
   # 0 = hors cycle, 1 = cycle matin, 2 = cycle soir
   - id: g_cycle_phase
     type: int
@@ -259,8 +263,9 @@ text_sensor:
       int h = s / 3600;
       int m = (s % 3600 + 59) / 60;  // round up so we never show 0min while active
       char buf[20];
-      if (h > 0) snprintf(buf, sizeof(buf), "%dh %dmin", h, m);
-      else       snprintf(buf, sizeof(buf), "%dmin", m);
+      if (h > 0 && m > 0) snprintf(buf, sizeof(buf), "%dh %dmin", h, m);
+      else if (h > 0)    snprintf(buf, sizeof(buf), "%dh", h);
+      else               snprintf(buf, sizeof(buf), "%dmin", m);
       return {buf};
 
 time:
@@ -291,6 +296,23 @@ script:
                   message: "Heure non synchronisée avec Home Assistant. Pompe à l'arrêt."
             - lambda: 'id(g_ntp_alert_sent) = true;'
 
+  # Alerte "fenêtres de filtration invalides" : déclenchée par _calcul_filtration quand
+  # le clamp pivot/pause produit une fenêtre vide (matin ou soir). Latch pour éviter le
+  # spam multi-recalc ; réarmé en début de _calcul_filtration si les fenêtres redeviennent valides.
+  - id: _invalid_window_alert_once
+    mode: single
+    then:
+      - if:
+          condition:
+            api.connected:
+          then:
+            - homeassistant.action:
+                action: persistent_notification.create
+                data:
+                  title: "${friendly_name} - Fenêtres invalides"
+                  message: "Le planning de filtration est tronqué par le clamp pivot + pause. Vérifiez Heure Pivot et Durée Pause."
+            - lambda: 'id(g_invalid_window_alert_sent) = true;'
+
   # Démarre ou arrête un mode forcé. hours=0 arme le compteur à 0 (le prochain tick
   # de l'interval décidera de la pompe selon schedule/antigel) ; hours>0 active et
   # rallume la pompe immédiatement.
@@ -301,6 +323,11 @@ script:
       - lambda: |-
           // Clamp [0, 24] : bornes UI. Évite l'overflow de hours*3600 (signed int32
           // wrap vers 596524) et les verrous pompe multi-jours via appel HA direct.
+          // hours=0 : commande "Arrêter" (le compteur est mis à 0, le prochain tick 30s
+          // rendra la pompe au planning / antigel).
+          if (hours < 0 || hours > 24) {
+            ESP_LOGW("filtration", "force_filtration(%d) hors plage [0,24] — clampé", hours);
+          }
           int h = hours < 0 ? 0 : (hours > 24 ? 24 : hours);
           id(g_forced_remaining_s) = h * 3600;
           if (h > 0) id(pump).turn_on();
@@ -430,12 +457,19 @@ script:
 
           // Validation : fenêtre vide si clampage excessif (pivot/pause mal configurés).
           // Ex. pivot=00:30 + pause=6h → pause_start clampé à 0 → h_fin1=0=h_debut1.
-          if (h_debut1 >= h_fin1)
+          bool invalid_morning = (h_debut1 >= h_fin1);
+          bool invalid_evening = (h_debut2 >= h_fin2);
+          if (invalid_morning)
             ESP_LOGE("filtration", "Fenêtre matin invalide [%02d:%02d-%02d:%02d) — vérifiez Heure Pivot et Durée Pause",
               h_debut1/60, h_debut1%60, h_fin1/60, h_fin1%60);
-          if (h_debut2 >= h_fin2)
+          if (invalid_evening)
             ESP_LOGE("filtration", "Fenêtre soir invalide [%02d:%02d-%02d:%02d) — vérifiez Heure Pivot et Durée Pause",
               h_debut2/60, h_debut2%60, h_fin2/60, h_fin2%60);
+          if ((invalid_morning || invalid_evening) && !id(g_invalid_window_alert_sent)) {
+            id(_invalid_window_alert_once).execute();
+          } else if (!invalid_morning && !invalid_evening) {
+            id(g_invalid_window_alert_sent) = false;
+          }
 
           ESP_LOGI("filtration",
             "Calcul: T=%.1f°C mode=%s dur=%dmin matin:[%02d:%02d-%02d:%02d] soir:[%02d:%02d-%02d:%02d]",
@@ -534,3 +568,22 @@ interval:
             id(_calcul_filtration).execute();
           }
           id(pump).turn_off();
+
+# API actions exposées à Home Assistant pour piloter la filtration depuis une automation :
+#   force_filtration(hours: int)   — hours in [0, 24] ; hours=0 annule le mode forcé ;
+#                                     les valeurs hors plage sont clampées silencieusement
+#                                     mais _start_forced_mode journalise un ESP_LOGW.
+#   recalc_filtration              — force un recalcul immédiat des fenêtres matin/soir
+#                                     (asynchrone, fire-and-restart).
+api:
+  actions:
+    - action: force_filtration
+      variables:
+        hours: int
+      then:
+        - script.execute:
+            id: _start_forced_mode
+            hours: !lambda "return hours;"
+    - action: recalc_filtration
+      then:
+        - script.execute: _calcul_filtration

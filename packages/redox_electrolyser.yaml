@@ -34,11 +34,14 @@ select:
           } else if (id(electrolyser_mode).state == "Forcé") {
             id(electrolyser).turn_on();
           } else {
+            // Mode Auto : laisser l'intervalle régulateur (gate 30 min) décider du turn_on.
+            // On se contente de couper si l'ORP est déjà au-dessus du setpoint (filet OFF rapide)
+            // et de réinitialiser le compteur de stabilité pour que l'allumage attende une vraie
+            // fenêtre stable après la bascule de mode.
             if (id(pool_redox).state > id(redox_setpoint).state) {
               id(electrolyser).turn_off();
-            } else {
-              id(electrolyser).turn_on();
             }
+            id(g_redox_stable_minutes) = 0;
           }
 
 number:
