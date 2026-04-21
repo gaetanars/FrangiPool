@@ -36,11 +36,6 @@ globals:
     type: int
     restore_value: False
     initial_value: '0'
-  # Durée totale calculée (minutes/jour) — exposée comme sensor diagnostique
-  - id: g_dur_total_min
-    type: int
-    restore_value: False
-    initial_value: '0'
   # Secondes restantes en mode forcé (décrémenté de 30 à chaque tick de l'intervalle).
   # restore_value: false garantit la non-persistance au reboot (R8).
   - id: g_forced_remaining_s
@@ -156,15 +151,6 @@ datetime:
 
 button:
   - platform: template
-    name: Recalcul Filtration
-    id: filtration_recalculate
-    entity_category: config
-    icon: mdi:calculator-variant
-    on_press:
-      then:
-        - script.execute: _calcul_filtration
-
-  - platform: template
     name: "Forcer Filtration 2h"
     id: filtration_force_2h
     entity_category: config
@@ -214,7 +200,8 @@ sensor:
     icon: mdi:timer-outline
     update_interval: never
     lambda: |-
-      return (float)id(g_dur_total_min);
+      // Somme des deux fenêtres de pompage (après clamping).
+      return (float)((id(g_h_fin1) - id(g_h_debut1)) + (id(g_h_fin2) - id(g_h_debut2)));
 
 text_sensor:
   - platform: template
@@ -335,7 +322,6 @@ script:
             id(g_h_debut1) = 0; id(g_h_fin1) = 0;
             id(g_h_debut2) = 0; id(g_h_fin2) = 0;
             id(g_cycle_phase) = 0;
-            id(g_dur_total_min) = 0;
             ESP_LOGI("filtration", "Mode Off: fenêtres nulles");
             return;
           }
@@ -419,7 +405,6 @@ script:
           // même si un NaN a échappé aux guards précédents.
           if (dur_total_min < 0)       dur_total_min = 0;
           if (dur_total_min > MAX_MIN) dur_total_min = MAX_MIN;
-          id(g_dur_total_min) = dur_total_min;
 
           // Répartition matin/soir
           int dur_matin_min = (int)(dur_total_min * ratio / 100.0f);
@@ -485,7 +470,11 @@ interval:
           if (id(g_forced_remaining_s) > 0) {
             id(g_forced_remaining_s) -= 30;
             if (id(g_forced_remaining_s) < 0) id(g_forced_remaining_s) = 0;
-            id(forced_countdown).update();
+            // L'affichage est à la minute : on ne republishe qu'aux bornes minute.
+            // Expiration (0) : % 60 == 0 déclenche aussi le dernier update vers "Inactif".
+            if (id(g_forced_remaining_s) % 60 == 0) {
+              id(forced_countdown).update();
+            }
           }
 
           // Antigel prioritaire — vérifié avant le garde NTP.
@@ -546,18 +535,17 @@ interval:
             return;
           }
 
-          // Hors fenêtres
+          // Hors fenêtres — on n'arrive ici que si g_forced_remaining_s == 0 déjà
+          // (le early-return plus haut aurait fired sinon), donc le recalc est sûr.
           if (id(g_cycle_phase) == 2) {
             // Fin cycle soir → recalcul pour le lendemain
             id(g_cycle_phase) = 0;
             id(filtration_phase).update();
-            // Garde mode forcé : recalcul uniquement si aucun mode forcé n'est actif
-            if (id(g_forced_remaining_s) == 0) id(_calcul_filtration).execute();
+            id(_calcul_filtration).execute();
           } else if (id(g_cycle_phase) == 1) {
             // Entrée pause → recalcul avec T post-matin pour dimensionner le cycle soir
             id(g_cycle_phase) = 0;
             id(filtration_phase).update();
-            // Garde mode forcé : recalcul uniquement si aucun mode forcé n'est actif
-            if (id(g_forced_remaining_s) == 0) id(_calcul_filtration).execute();
+            id(_calcul_filtration).execute();
           }
           id(pump).turn_off();
