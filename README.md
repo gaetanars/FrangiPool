@@ -197,15 +197,15 @@ Les sections pH, Redox, Booster et Électrolyseur+Redox se masquent automatiquem
 
 Home Assistant reste utile pour superviser l'état de l'ESP, recevoir les notifications (antigel, calibration) et ajuster les paramètres. Mais **aucune automatisation HA n'est nécessaire** pour que la filtration fonctionne.
 
-### Migration v1.x → v2.0
+### Migration v0.1 → v0.2
 
-La v2.0 déplace la planification et les consignes sur l'ESP. Si tu montes depuis la v1.x, prévois les étapes suivantes.
+La v0.2 déplace la planification et les consignes sur l'ESP. Si tu montes depuis la v0.1, prévois les étapes suivantes.
 
-**Blueprint Home Assistant (obsolète).** Le blueprint `homeassistant/blueprint/frangipool.yaml` n'est plus maintenu et est supprimé du dépôt. Avant de flasher la v2.0, ouvre HA → Settings → Automations & Scenes → filtre par blueprint `FrangiPool` → désactive ou supprime les automations correspondantes. Laisser le blueprint actif provoque du pump-chattering : deux sources (blueprint HA + planification ESP) écrivent sur `switch.frangipool_filtration` à chaque limite de cycle.
+**Blueprint Home Assistant (obsolète).** Le blueprint `homeassistant/blueprint/frangipool.yaml` n'est plus maintenu et est supprimé du dépôt. Avant de flasher la v0.2, ouvre HA → Settings → Automations & Scenes → filtre par blueprint `FrangiPool` → désactive ou supprime les automations correspondantes. Laisser le blueprint actif provoque du pump-chattering : deux sources (blueprint HA + planification ESP) écrivent sur `switch.frangipool_filtration` à chaque limite de cycle.
 
 **Package Home Assistant (obsolète).** Le package HA `homeassistant/package/frangipool.yaml` est également supprimé. Les entités d'aide HA sont remplacées par des entités exposées par l'ESP. Mets à jour tes automations selon la correspondance :
 
-| v1.x (HA helpers) | v2.0 (entités ESP) |
+| v0.1 (HA helpers) | v0.2 (entités ESP) |
 | --- | --- |
 | `input_select.mode_filtration_piscine` | `select.frangipool_mode_filtration` |
 | `input_datetime.heure_debut_filtration_*` | Plus d'entrée manuelle — les fenêtres sont calculées, exposées via `sensor.frangipool_horaires_filtration` |
@@ -215,7 +215,7 @@ La v2.0 déplace la planification et les consignes sur l'ESP. Si tu montes depui
 
 **Options du mode filtration.** Les valeurs du select ont changé. ESPHome ignore silencieusement les valeurs inconnues — toute automation HA appelant `select.select_option` avec les anciens libellés ne fera rien.
 
-| v1.x | v2.0 |
+| v0.1 | v0.2 |
 | --- | --- |
 | `Inactif` | `Off` |
 | `Hivernage` | `Hiver` |
@@ -279,4 +279,4 @@ packages:
   redox_electrolyser: github://gaetanars/FrangiPool/packages/redox_electrolyser.yaml@main
 ```
 
-Tous les packages sont téléchargés directement depuis GitHub au moment de la compilation. Pour épingler une version spécifique, remplacer `@main` par un tag (ex : `@v2.0.0`).
+Tous les packages sont téléchargés directement depuis GitHub au moment de la compilation. Pour épingler une version spécifique, remplacer `@main` par un tag (ex : `@v0.2.0`).
