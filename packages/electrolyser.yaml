@@ -18,6 +18,7 @@ switch:
         - globals.set:
             id: g_electrolyser_active_minutes
             value: '0'
+        - component.update: electrolyser_duration
 
 sensor:
   - platform: template
@@ -28,7 +29,7 @@ sensor:
     state_class: total_increasing
     accuracy_decimals: 0
     icon: mdi:chemical-weapon
-    update_interval: 60s
+    update_interval: never
     lambda: |-
       return (float) id(g_electrolyser_active_minutes);
 
@@ -42,3 +43,4 @@ interval:
               - switch.is_on: electrolyser
           then:
             - lambda: "id(g_electrolyser_active_minutes) += 1;"
+            - component.update: electrolyser_duration

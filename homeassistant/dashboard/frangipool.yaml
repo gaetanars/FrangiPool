@@ -89,7 +89,9 @@ views:
               - entity: sensor.frangipool_horaires_filtration
                 name: Horaires
               - entity: sensor.frangipool_duree_filtration_journaliere
-                name: Durée journalière (min)
+                name: Planifiée (min)
+              - entity: sensor.frangipool_duree_filtration_effective
+                name: Effective (min)
               - entity: sensor.frangipool_mode_auto_actif
                 name: Mode Auto actif
 
