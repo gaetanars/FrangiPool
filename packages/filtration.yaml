@@ -48,9 +48,12 @@ globals:
     initial_value: '0'
   # Minutes pompe ON cumulées aujourd'hui. Incrémenté par l'interval 60s quand
   # la pompe est ON, remis à 0 à minuit via la cron existante.
+  # restore_value: True pour qu'un reboot bref (OTA, coupure) ne perde pas le
+  # cumul du jour. Risque résiduel : un reboot qui traverse minuit affiche la
+  # valeur d'hier jusqu'à la prochaine cron 00:00 (auto-heal ≤ 24 h).
   - id: g_pump_effective_minutes_today
     type: int
-    restore_value: False
+    restore_value: True
     initial_value: '0'
 
 select:
