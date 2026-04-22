@@ -4,10 +4,15 @@ substitutions:
   local_temp_address: "0x0000000000000000"
   temp_address: "0x0000000000000000"
 
+esphome:
+  min_version: 2024.6.0
+
 wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
   ap:
     ssid: ${friendly_name} Fallback Hotspot
-    password: "12345678"
+    password: !secret ap_password
 
 esp32:
   board: nodemcu-32s
@@ -18,31 +23,29 @@ logger:
   level: INFO
 
 api:
+  encryption:
+    key: !secret api_encryption_key
 
 ota:
   - platform: esphome
-
-improv_serial:
-
-esp32_improv:
-  authorizer: none
+    password: !secret ota_password
 
 captive_portal:
 
 time:
   - platform: homeassistant
-    timezone: Europe/Paris
     id: esptime
+    timezone: Europe/Paris
 
 one_wire:
   - platform: gpio
     pin: GPIO23
 
 globals:
-  - id: pump_last_turn_on
+  - id: g_pump_last_turn_on
     type: int
     restore_value: True
-  - id: store_pool_temp
+  - id: g_store_pool_temp
     type: float
     restore_value: True
 
@@ -111,7 +114,7 @@ sensor:
     id: pool_temp
     accuracy_decimals: 1
     lambda: |-
-      return id(store_pool_temp);
+      return id(g_store_pool_temp);
 
   - platform: template
     name: Pump Uptime
@@ -119,11 +122,13 @@ sensor:
     internal: true
     unit_of_measurement: "min"
     lambda: |-
-      if (id(pump).state){
-        return (id(esptime).now().timestamp - id(pump_last_turn_on)) / 60.0;
-      } else {
-        return 0.0;
-      }
+      // Premier flash : g_pump_last_turn_on vaut 0 (C++ zero-init), ce qui ferait passer
+      // la garde des 20 min dès le boot. On reporte 0 tant que la pompe n'a jamais été
+      // réellement allumée — le handler on_turn_on du switch écrit un vrai timestamp au
+      // premier démarrage.
+      if (!id(pump).state) return 0.0;
+      if (id(g_pump_last_turn_on) <= 0) return 0.0;
+      return (id(esptime).now().timestamp - id(g_pump_last_turn_on)) / 60.0;
 
   - platform: uptime
     name: Uptime
@@ -145,6 +150,8 @@ binary_sensor:
       static bool state = false;
 
       float t = id(pipe_temp_raw).state;
+      // Capteur Dallas injoignable : préserver l'état précédent plutôt que laisser NaN verrouiller OFF.
+      if (std::isnan(t)) return state;
       float on_threshold  = id(max_antifreeze_temp).state - 1.0;
       float off_threshold = id(max_antifreeze_temp).state;
 
@@ -170,7 +177,6 @@ binary_sensor:
                 Température canalisation : {{ states('sensor.temperature_canalisation') }} °C
     on_release:
       then:
-        - switch.turn_off: pump
         - homeassistant.action:
             action: persistent_notification.create
             data:
@@ -185,6 +191,7 @@ binary_sensor:
     entity_category: diagnostic
 
 switch:
+  # Scheduler-owned: authoritative writer is packages/filtration.yaml (interval 30s).
   - platform: gpio
     pin:
       number: GPIO25
@@ -196,7 +203,7 @@ switch:
     on_turn_on:
       then:
         - globals.set:
-            id: pump_last_turn_on
+            id: g_pump_last_turn_on
             value: !lambda "return id(esptime).now().timestamp;"
 
 button:
@@ -209,14 +216,6 @@ status_led:
     inverted: yes
 
 interval:
-  - interval: 30s
-    then:
-      - if:
-          condition:
-            binary_sensor.is_on: antifreeze
-          then:
-            - switch.turn_on: pump
-
   - interval: 1min
     then:
       - if:
@@ -226,5 +225,5 @@ interval:
               - lambda: "return id(pump_uptime).state >= id(pump_uptime_delay).state;"
           then:
             - globals.set:
-                id: store_pool_temp
+                id: g_store_pool_temp
                 value: !lambda "return id(pipe_temp).state;"

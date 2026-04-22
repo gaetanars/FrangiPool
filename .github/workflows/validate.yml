@@ -1,0 +1,47 @@
+name: Validate ESPHome configs
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Token minimal : validation ESPHome a seulement besoin de lire le repo.
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        config:
+          - salt_minimal.yaml
+          - salt_full.yaml
+          - salt_wo_ph.yaml
+          - salt_wo_redox.yaml
+          - salt_booster_minimal.yaml
+          - salt_booster_full.yaml
+          - salt_booster_wo_ph.yaml
+          - salt_booster_wo_redox.yaml
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+
+      - name: Install ESPHome
+        run: pip install "esphome==2026.3.3"  # pin to tested version — update when upgrading locally
+
+      - name: Override remote packages with local files
+        # Remplace github://gaetanars/FrangiPool/packages/X.yaml@main par !include packages/X.yaml
+        # afin que la CI valide les packages du commit en cours et non ceux de @main.
+        # NOTE : URL migrée depuis github://frangipool/esphome-config/ vers github://gaetanars/FrangiPool/.
+        run: |
+          sed -i 's|github://gaetanars/FrangiPool/packages/\(.*\)\.yaml@main|!include packages/\1.yaml|g' \
+            ${{ matrix.config }}
+
+      - name: Seed secrets.yaml from example
+        # `esphome config` résout les !secret et n'offre pas de flag pour les ignorer.
+        # On copie l'exemple (valeurs factices mais conformes : clé API 32 bytes base64, AP password >=8 chars).
+        run: cp secrets.example.yaml secrets.yaml
+
+      - name: Validate ${{ matrix.config }}
+        run: esphome config ${{ matrix.config }}

@@ -1,10 +1,7 @@
 globals:
-  - id: electrolyser_last_turn_on
+  - id: g_electrolyser_active_minutes
     type: int
-    restore_value: true
-  - id: effective_electrolysis_minutes
-    type: int
-    restore_value: true
+    restore_value: True
     initial_value: '0'
 
 switch:
@@ -16,19 +13,28 @@ switch:
     id: electrolyser
     restore_mode: RESTORE_DEFAULT_ON
     icon: mdi:chemical-weapon
-    on_turn_on:
-      then:
-        - globals.set:
-            id: electrolyser_last_turn_on
-            value: !lambda "return id(esptime).now().timestamp;"
     on_turn_off:
       then:
         - globals.set:
-            id: effective_electrolysis_minutes
+            id: g_electrolyser_active_minutes
             value: '0'
+        - component.update: electrolyser_duration
+
+sensor:
+  - platform: template
+    name: Durée Electrolyse
+    id: electrolyser_duration
+    unit_of_measurement: min
+    device_class: duration
+    state_class: total_increasing
+    accuracy_decimals: 0
+    icon: mdi:chemical-weapon
+    update_interval: never
+    lambda: |-
+      return (float) id(g_electrolyser_active_minutes);
 
 interval:
-  - interval: 1min
+  - interval: 60s
     then:
       - if:
           condition:
@@ -36,4 +42,5 @@ interval:
               - switch.is_on: pump
               - switch.is_on: electrolyser
           then:
-            - lambda: "id(effective_electrolysis_minutes) += 1;"
+            - lambda: "id(g_electrolyser_active_minutes) += 1;"
+            - component.update: electrolyser_duration

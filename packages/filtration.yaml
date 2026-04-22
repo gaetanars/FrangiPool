@@ -1,0 +1,624 @@
+globals:
+  - id: g_h_debut1
+    type: int
+    restore_value: False
+    initial_value: '0'
+  - id: g_h_fin1
+    type: int
+    restore_value: False
+    initial_value: '0'
+  - id: g_h_debut2
+    type: int
+    restore_value: False
+    initial_value: '0'
+  - id: g_h_fin2
+    type: int
+    restore_value: False
+    initial_value: '0'
+  # true = logique Hiver, false = logique Courbe (sub-mode du mode Auto)
+  # restore_value: true — conserve l'état saisonnier entre les redémarrages pour que
+  # l'hystérésis ne reparte pas de zéro à chaque coupure de courant.
+  - id: g_auto_submode
+    type: bool
+    restore_value: True
+    initial_value: 'false'
+  # true = premier calcul déjà effectué (désactive le seuil d'init à 16 °C)
+  - id: g_auto_initialized
+    type: bool
+    restore_value: True
+    initial_value: 'false'
+  - id: g_ntp_alert_sent
+    type: bool
+    restore_value: False
+    initial_value: 'false'
+  - id: g_invalid_window_alert_sent
+    type: bool
+    restore_value: False
+    initial_value: 'false'
+  # 0 = hors cycle, 1 = cycle matin, 2 = cycle soir
+  - id: g_cycle_phase
+    type: int
+    restore_value: False
+    initial_value: '0'
+  # Secondes restantes en mode forcé (décrémenté de 30 à chaque tick de l'intervalle).
+  # restore_value: false garantit la non-persistance au reboot (R8).
+  - id: g_forced_remaining_s
+    type: int
+    restore_value: False
+    initial_value: '0'
+  # Minutes pompe ON cumulées aujourd'hui. Incrémenté par l'interval 60s quand
+  # la pompe est ON, remis à 0 à minuit via la cron existante.
+  # restore_value: True pour qu'un reboot bref (OTA, coupure) ne perde pas le
+  # cumul du jour. Risque résiduel : un reboot qui traverse minuit affiche la
+  # valeur d'hier jusqu'à la prochaine cron 00:00 (auto-heal ≤ 24 h).
+  - id: g_pump_effective_minutes_today
+    type: int
+    restore_value: True
+    initial_value: '0'
+
+select:
+  - platform: template
+    name: Mode Filtration
+    id: filtration_mode
+    optimistic: True
+    options:
+      - "Off"
+      - "Hiver"
+      - "Courbe"
+      - "Auto"
+    restore_value: True
+    initial_option: "Auto"
+    entity_category: config
+    icon: mdi:pool
+    on_value:
+      then:
+        - script.execute: _calcul_filtration
+
+number:
+  - platform: template
+    name: Coefficient Filtration
+    id: filtration_coeff
+    optimistic: True
+    unit_of_measurement: "%"
+    step: 5
+    min_value: 50
+    max_value: 150
+    restore_value: True
+    initial_value: 100
+    entity_category: config
+    on_value:
+      then:
+        - script.execute: _calcul_filtration
+
+  - platform: template
+    name: Durée Pause Filtration
+    id: filtration_pause
+    optimistic: True
+    unit_of_measurement: "h"
+    step: 0.5
+    min_value: 0
+    max_value: 12
+    restore_value: True
+    initial_value: 8
+    entity_category: config
+    on_value:
+      then:
+        - script.execute: _calcul_filtration
+
+  - platform: template
+    name: Ratio Matin Filtration
+    id: filtration_ratio_matin
+    optimistic: True
+    unit_of_measurement: "%"
+    step: 5
+    min_value: 20
+    max_value: 50
+    restore_value: True
+    initial_value: 33
+    entity_category: config
+    on_value:
+      then:
+        - script.execute: _calcul_filtration
+
+  - platform: template
+    name: Durée Hiver Min
+    id: filtration_hiver_min
+    optimistic: True
+    unit_of_measurement: "h"
+    step: 0.5
+    min_value: 0
+    max_value: 12
+    restore_value: True
+    initial_value: 3
+    entity_category: config
+    on_value:
+      then:
+        - script.execute: _calcul_filtration
+
+  - platform: template
+    name: Diviseur Hiver
+    id: filtration_diviseur
+    optimistic: True
+    step: 0.5
+    min_value: 1
+    max_value: 5
+    restore_value: True
+    initial_value: 3
+    entity_category: config
+    on_value:
+      then:
+        - script.execute: _calcul_filtration
+
+datetime:
+  - platform: template
+    type: time
+    name: Heure Pivot Filtration
+    id: filtration_pivot
+    optimistic: True
+    restore_value: True
+    initial_value: "13:30:00"
+    entity_category: config
+    on_value:
+      then:
+        - script.execute: _calcul_filtration
+
+button:
+  - platform: template
+    name: "Forcer Filtration 2h"
+    id: filtration_force_2h
+    icon: mdi:timer-2
+    on_press:
+      - script.execute:
+          id: _start_forced_mode
+          hours: 2
+
+  - platform: template
+    name: "Forcer Filtration 6h"
+    id: filtration_force_6h
+    icon: mdi:timer-6
+    on_press:
+      - script.execute:
+          id: _start_forced_mode
+          hours: 6
+
+  - platform: template
+    name: "Forcer Filtration 24h"
+    id: filtration_force_24h
+    icon: mdi:timer-24
+    on_press:
+      - script.execute:
+          id: _start_forced_mode
+          hours: 24
+
+  - platform: template
+    name: "Arrêter Mode Forcé"
+    id: filtration_force_stop
+    icon: mdi:timer-off-outline
+    on_press:
+      - script.execute:
+          id: _start_forced_mode
+          hours: 0
+
+sensor:
+  - platform: template
+    name: Durée Filtration Journalière
+    id: filtration_duree_totale
+    unit_of_measurement: "min"
+    state_class: measurement
+    entity_category: diagnostic
+    icon: mdi:timer-outline
+    update_interval: never
+    lambda: |-
+      return (float)((id(g_h_fin1) - id(g_h_debut1)) + (id(g_h_fin2) - id(g_h_debut2)));
+
+  - platform: template
+    name: "Mode Forcé — Secondes restantes"
+    id: forced_remaining_seconds
+    unit_of_measurement: "s"
+    state_class: measurement
+    entity_category: diagnostic
+    icon: mdi:timer-sand
+    update_interval: never
+    lambda: 'return (float)id(g_forced_remaining_s);'
+
+  - platform: template
+    name: Durée Filtration Effective
+    id: filtration_effective_minutes
+    unit_of_measurement: "min"
+    device_class: duration
+    state_class: total_increasing
+    entity_category: diagnostic
+    icon: mdi:timer-check-outline
+    update_interval: never
+    lambda: 'return (float)id(g_pump_effective_minutes_today);'
+
+text_sensor:
+  - platform: template
+    name: Horaires Filtration
+    id: filtration_horaires
+    entity_category: diagnostic
+    icon: mdi:clock-time-four-outline
+    update_interval: never
+    lambda: |-
+      char buf[40];
+      snprintf(buf, sizeof(buf), "%02d:%02d-%02d:%02d / %02d:%02d-%02d:%02d",
+        id(g_h_debut1)/60, id(g_h_debut1)%60,
+        id(g_h_fin1)/60,   id(g_h_fin1)%60,
+        id(g_h_debut2)/60, id(g_h_debut2)%60,
+        id(g_h_fin2)/60,   id(g_h_fin2)%60);
+      return {buf};
+
+  - platform: template
+    name: Phase Filtration
+    id: filtration_phase
+    entity_category: diagnostic
+    icon: mdi:state-machine
+    update_interval: never
+    lambda: |-
+      switch (id(g_cycle_phase)) {
+        case 1:  return {"Cycle matin"};
+        case 2:  return {"Cycle soir"};
+        default: return {"Pause"};
+      }
+
+  - platform: template
+    name: Mode Auto Actif
+    id: filtration_auto_mode_actif
+    entity_category: diagnostic
+    icon: mdi:thermometer-auto
+    update_interval: never
+    lambda: |-
+      if (id(filtration_mode).state != "Auto") return {"N/A"};
+      return id(g_auto_submode) ? std::string{"Hiver"} : std::string{"Courbe"};
+
+  - platform: template
+    name: "Mode Forcé — Temps restant"
+    id: forced_countdown
+    entity_category: diagnostic
+    icon: mdi:timer-play-outline
+    update_interval: never
+    lambda: |-
+      int s = id(g_forced_remaining_s);
+      if (s <= 0) return {"Inactif"};
+      int h = s / 3600;
+      int m = (s % 3600 + 59) / 60;  // round up so we never show 0min while active
+      char buf[20];
+      if (h > 0 && m > 0) snprintf(buf, sizeof(buf), "%dh %dmin", h, m);
+      else if (h > 0)    snprintf(buf, sizeof(buf), "%dh", h);
+      else               snprintf(buf, sizeof(buf), "%dmin", m);
+      return {buf};
+
+time:
+  - id: !extend esptime
+    on_time_sync:
+      # Premier calcul après synchronisation NTP (boot ou re-sync périodique).
+      then:
+        - script.execute: _calcul_filtration
+    on_time:
+      - cron: "0 0 0 * * *"
+        then:
+          - globals.set:
+              id: g_pump_effective_minutes_today
+              value: '0'
+          - component.update: filtration_effective_minutes
+          - script.execute: _calcul_filtration
+
+script:
+  # Alerte NTP envoyée une seule fois par épisode. Le flag n'est posé que si l'API HA
+  # est joignable au moment de l'appel — sinon on réessaiera au prochain tick.
+  - id: _ntp_alert_once
+    mode: single
+    then:
+      - if:
+          condition:
+            api.connected:
+          then:
+            - homeassistant.action:
+                action: persistent_notification.create
+                data:
+                  title: "${friendly_name} - Heure"
+                  message: "Heure non synchronisée avec Home Assistant. Pompe à l'arrêt."
+            - lambda: 'id(g_ntp_alert_sent) = true;'
+
+  # Alerte "fenêtres de filtration invalides" : déclenchée par _calcul_filtration quand
+  # le clamp pivot/pause produit une fenêtre vide (matin ou soir). Latch pour éviter le
+  # spam multi-recalc ; réarmé en début de _calcul_filtration si les fenêtres redeviennent valides.
+  - id: _invalid_window_alert_once
+    mode: single
+    then:
+      - if:
+          condition:
+            api.connected:
+          then:
+            - homeassistant.action:
+                action: persistent_notification.create
+                data:
+                  title: "${friendly_name} - Fenêtres invalides"
+                  message: "Le planning de filtration est tronqué par le clamp pivot + pause. Vérifiez Heure Pivot et Durée Pause."
+            - lambda: 'id(g_invalid_window_alert_sent) = true;'
+
+  # Démarre ou arrête un mode forcé. hours=0 arme le compteur à 0 (le prochain tick
+  # de l'interval décidera de la pompe selon schedule/antigel) ; hours>0 active et
+  # rallume la pompe immédiatement.
+  - id: _start_forced_mode
+    parameters:
+      hours: int
+    then:
+      - lambda: |-
+          // Clamp [0, 24] : bornes UI. Évite l'overflow de hours*3600 (signed int32
+          // wrap vers 596524) et les verrous pompe multi-jours via appel HA direct.
+          // hours=0 : commande "Arrêter" (le compteur est mis à 0, le prochain tick 30s
+          // rendra la pompe au planning / antigel).
+          if (hours < 0 || hours > 24) {
+            ESP_LOGW("filtration", "force_filtration(%d) hors plage [0,24] — clampé", hours);
+          }
+          int h = hours < 0 ? 0 : (hours > 24 ? 24 : hours);
+          id(g_forced_remaining_s) = h * 3600;
+          if (h > 0) id(pump).turn_on();
+          id(forced_countdown).update();
+          id(forced_remaining_seconds).update();
+
+  # mode: restart — chaque nouveau trigger annule le calcul en cours ; le script est
+  # pur (écrit les globals + component.update en queue de lambda), donc l'annulation
+  # est sûre.
+  - id: _calcul_filtration
+    mode: restart
+    then:
+      - lambda: |-
+          // 1439 = 23 h 59 — dernière minute de la journée (minutes-depuis-minuit).
+          // Ne pas utiliser 1440 : minuit appartient au jour suivant et déclencherait le
+          // recalcul midnight avant d'avoir fini le cycle soir.
+          constexpr int MAX_MIN = 1439;
+
+          // Mode Off → fenêtres nulles, pompe dormante
+          if (id(filtration_mode).state == "Off") {
+            id(g_h_debut1) = 0; id(g_h_fin1) = 0;
+            id(g_h_debut2) = 0; id(g_h_fin2) = 0;
+            id(g_cycle_phase) = 0;
+            ESP_LOGI("filtration", "Mode Off: fenêtres nulles");
+            return;
+          }
+
+          // Température avec fallback NaN → 10 °C
+          // Valeur conservatrice : maintient une circulation minimale même sans capteur,
+          // sans risquer de surcharger la pompe ni de déclencher une bascule Auto intempestive.
+          // temp_valid est utilisé plus bas en mode Auto pour ne pas verrouiller le submode
+          // saisonnier si le tout premier boot tombe sur un capteur encore non synchronisé.
+          float t = id(pool_temp).state;
+          bool temp_valid = !std::isnan(t);
+          if (!temp_valid) t = 10.0f;
+
+          float coeff   = id(filtration_coeff).state;
+          float ratio   = id(filtration_ratio_matin).state;
+          float pause_h = id(filtration_pause).state;
+          float hmin    = id(filtration_hiver_min).state;
+          float divisr  = id(filtration_diviseur).state;
+
+          // --- Calcul durée totale ---
+          float duree_h = 0.0f;
+          std::string mode = id(filtration_mode).state;
+
+          auto calc_courbe = [](float tc) -> float {
+            if (tc < 10.0f) tc = 10.0f;
+            // Courbe polynomiale du 3e degré ajustée sur les recommandations de filtration.
+            // À T ≥ ~30 °C le résultat dépasse 24 h : le clamp à MAX_MIN donne une filtration
+            // quasi-continue, ce qui est intentionnel pour les pics de chaleur estivaux.
+            return 0.00335f*tc*tc*tc - 0.14953f*tc*tc + 2.43489f*tc - 10.72859f;
+          };
+          auto calc_hiver = [](float temp, float dur_min, float diviseur) -> float {
+            return temp < 10.0f ? dur_min : temp / diviseur;
+          };
+
+          if (mode == "Courbe") {
+            duree_h = calc_courbe(t);
+          } else if (mode == "Hiver") {
+            duree_h = calc_hiver(t, hmin, divisr);
+          } else {
+            // Mode Auto — hystérésis ±1 °C autour de 16 °C
+            // Seuils : bascule Hiver→Courbe à 17 °C, Courbe→Hiver à 15 °C.
+            // Premier boot (g_auto_initialized=false) : seuil direct à 16 °C sans hystérésis.
+            // g_auto_submode persiste (restore: true) pour conserver l'état saisonnier.
+            bool is_hiver = id(g_auto_submode);
+            if (!id(g_auto_initialized)) {
+              if (temp_valid) {
+                is_hiver = (t < 16.0f);
+                id(g_auto_submode) = is_hiver;
+                id(g_auto_initialized) = true;
+              } else {
+                // Tout premier boot avec température invalide (capteur pas encore
+                // synchronisé ou déconnecté) : ne pas verrouiller g_auto_submode sur
+                // le fallback 10 °C. Default transitoire Courbe (sûr pour un déploiement
+                // estival). Le prochain recalc avec temp valide fera l'init réelle.
+                is_hiver = false;
+              }
+            } else if (is_hiver && t > 17.0f) {
+              is_hiver = false;
+              id(g_auto_submode) = false;
+            } else if (!is_hiver && t < 15.0f) {
+              is_hiver = true;
+              id(g_auto_submode) = true;
+            }
+            duree_h = is_hiver
+              ? calc_hiver(t, hmin, divisr)
+              : calc_courbe(t);
+          }
+
+          // Appliquer coefficient et clamp [0, MAX_MIN]
+          duree_h *= coeff / 100.0f;
+          if (duree_h < 0.0f) duree_h = 0.0f;
+          int dur_total_min = (int)(duree_h * 60.0f);
+          if (dur_total_min > MAX_MIN) dur_total_min = MAX_MIN;
+
+          // Répartition matin/soir
+          int dur_matin_min = (int)(dur_total_min * ratio / 100.0f);
+          int dur_soir_min  = dur_total_min - dur_matin_min;
+
+          // Pivot et pause (en minutes depuis minuit).
+          int pivot_min = id(filtration_pivot).hour * 60 + id(filtration_pivot).minute;
+          int pause_min = (int)(pause_h * 60.0f);
+          // pause=0 → pause_start == pause_end == pivot : cycles contigus
+          int pause_start = pivot_min - pause_min / 2;
+          int pause_end   = pivot_min + (pause_min - pause_min / 2); // arrondi correct
+
+          // Clamp pause_start et pause_end dans [0, MAX_MIN] AVANT de dériver les fenêtres.
+          // Sans ce clamp, h_fin1 (=pause_start) peut devenir négatif et h_debut2 (=pause_end)
+          // peut dépasser MAX_MIN — rendant les fenêtres de pompage silencieusement inactives.
+          if (pause_start < 0)       pause_start = 0;
+          if (pause_end   > MAX_MIN) pause_end   = MAX_MIN;
+
+          // Calcul fenêtres
+          int h_debut1 = pause_start - dur_matin_min;
+          int h_fin1   = pause_start;
+          int h_debut2 = pause_end;
+          int h_fin2   = pause_end + dur_soir_min;
+
+          // Clamping des extrémités (début matin et fin soir)
+          if (h_debut1 < 0)       h_debut1 = 0;
+          if (h_fin2   > MAX_MIN) h_fin2   = MAX_MIN;
+
+          id(g_h_debut1) = h_debut1; id(g_h_fin1) = h_fin1;
+          id(g_h_debut2) = h_debut2; id(g_h_fin2) = h_fin2;
+
+          // Validation : fenêtre vide si clampage excessif (pivot/pause mal configurés).
+          // Ex. pivot=00:30 + pause=6h → pause_start clampé à 0 → h_fin1=0=h_debut1.
+          bool invalid_morning = (h_debut1 >= h_fin1);
+          bool invalid_evening = (h_debut2 >= h_fin2);
+          if (invalid_morning)
+            ESP_LOGE("filtration", "Fenêtre matin invalide [%02d:%02d-%02d:%02d) — vérifiez Heure Pivot et Durée Pause",
+              h_debut1/60, h_debut1%60, h_fin1/60, h_fin1%60);
+          if (invalid_evening)
+            ESP_LOGE("filtration", "Fenêtre soir invalide [%02d:%02d-%02d:%02d) — vérifiez Heure Pivot et Durée Pause",
+              h_debut2/60, h_debut2%60, h_fin2/60, h_fin2%60);
+          if ((invalid_morning || invalid_evening) && !id(g_invalid_window_alert_sent)) {
+            id(_invalid_window_alert_once).execute();
+          } else if (!invalid_morning && !invalid_evening) {
+            id(g_invalid_window_alert_sent) = false;
+          }
+
+          ESP_LOGI("filtration",
+            "Calcul: T=%.1f°C mode=%s dur=%dmin matin:[%02d:%02d-%02d:%02d] soir:[%02d:%02d-%02d:%02d]",
+            t, mode.c_str(), dur_total_min,
+            h_debut1/60, h_debut1%60, h_fin1/60, h_fin1%60,
+            h_debut2/60, h_debut2%60, h_fin2/60, h_fin2%60);
+      # Mise à jour des sensors diagnostiques après chaque recalcul
+      # (update_interval: never → ne se rafraîchissent que sur appel explicite)
+      - component.update: filtration_duree_totale
+      - component.update: filtration_horaires
+      - component.update: filtration_auto_mode_actif
+      - component.update: filtration_phase
+
+interval:
+  - interval: 30s
+    then:
+      - lambda: |-
+          // Mode forcé — décrémenté EN PREMIER, avant le bloc antigel.
+          // Garantit que le compteur s'écoule même si l'antigel est actif simultanément
+          // (ex. nuit froide pendant un traitement 24 h) : sans ce décrément préalable,
+          // l'antigel absorbait tous les ticks et le mode forcé ne se terminait jamais.
+          if (id(g_forced_remaining_s) > 0) {
+            id(g_forced_remaining_s) -= 30;
+            if (id(g_forced_remaining_s) < 0) id(g_forced_remaining_s) = 0;
+            // L'affichage est à la minute : on ne republishe qu'aux bornes minute.
+            // Expiration (0) : % 60 == 0 déclenche aussi le dernier update vers "Inactif".
+            if (id(g_forced_remaining_s) % 60 == 0) {
+              id(forced_countdown).update();
+              id(forced_remaining_seconds).update();
+            }
+          }
+
+          // Antigel prioritaire — vérifié avant le garde NTP.
+          // La protection antigel est indépendante de l'heure : la pompe doit tourner
+          // même si HA est indisponible et l'heure non synchronisée.
+          if (id(antifreeze).state) {
+            id(pump).turn_on();
+            return;
+          }
+
+          // Mode forcé — maintient la pompe ON (compteur déjà décrémenté ci-dessus).
+          if (id(g_forced_remaining_s) > 0) {
+            id(pump).turn_on();
+            return;
+          }
+
+          // Mode Off — ne dépend pas de l'heure, donc vérifié avant le garde NTP.
+          if (id(filtration_mode).state == "Off") {
+            if (id(g_cycle_phase) != 0) {
+              id(g_cycle_phase) = 0;
+              id(filtration_phase).update();
+            }
+            id(pump).turn_off();
+            return;
+          }
+
+          auto now = id(esptime).now();
+
+          // Guard NTP : sans heure valide, impossible de respecter le planning.
+          if (!now.is_valid()) {
+            if (!id(g_ntp_alert_sent)) {
+              id(_ntp_alert_once).execute();
+            }
+            ESP_LOGW("filtration", "Heure HA non synchronisée - pompe à l'arrêt");
+            id(pump).turn_off();
+            return;
+          }
+          id(g_ntp_alert_sent) = false;
+
+          int current_min = now.hour * 60 + now.minute;
+
+          // Cycle matin (phase 1)
+          if (current_min >= id(g_h_debut1) && current_min < id(g_h_fin1)) {
+            if (id(g_cycle_phase) != 1) {
+              id(g_cycle_phase) = 1;
+              id(filtration_phase).update();
+            }
+            id(pump).turn_on();
+            return;
+          }
+
+          // Cycle soir (phase 2)
+          if (current_min >= id(g_h_debut2) && current_min < id(g_h_fin2)) {
+            if (id(g_cycle_phase) != 2) {
+              id(g_cycle_phase) = 2;
+              id(filtration_phase).update();
+            }
+            id(pump).turn_on();
+            return;
+          }
+
+          // Hors fenêtres — fin de cycle matin ou soir → recalcul pour la prochaine fenêtre.
+          if (id(g_cycle_phase) != 0) {
+            id(g_cycle_phase) = 0;
+            id(filtration_phase).update();
+            id(_calcul_filtration).execute();
+          }
+          id(pump).turn_off();
+
+  # Compteur pompe effective du jour — indépendant du scheduler 30s pour séparer les concerns.
+  # Reset par la cron midnight (voir bloc time: plus haut).
+  - interval: 60s
+    then:
+      - if:
+          condition:
+            switch.is_on: pump
+          then:
+            - lambda: "id(g_pump_effective_minutes_today) += 1;"
+            - component.update: filtration_effective_minutes
+
+# API actions exposées à Home Assistant pour piloter la filtration depuis une automation :
+#   force_filtration(hours: int)   — hours in [0, 24] ; hours=0 annule le mode forcé ;
+#                                     les valeurs hors plage sont clampées silencieusement
+#                                     mais _start_forced_mode journalise un ESP_LOGW.
+#   recalc_filtration              — force un recalcul immédiat des fenêtres matin/soir
+#                                     (asynchrone, fire-and-restart).
+api:
+  actions:
+    - action: force_filtration
+      variables:
+        hours: int
+      then:
+        - script.execute:
+            id: _start_forced_mode
+            hours: !lambda "return hours;"
+    - action: recalc_filtration
+      then:
+        - script.execute: _calcul_filtration

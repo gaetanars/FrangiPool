@@ -10,14 +10,15 @@ esphome:
   friendly_name: ${friendly_name}
   project:
     name: frangipool.salt_wo_ph
-    version: "2.0.0"
+    version: "0.2.0"
 
 dashboard_import:
-  package_import_url: github://frangipool/esphome-config/salt_wo_ph.yaml@main
+  package_import_url: github://gaetanars/FrangiPool/salt_wo_ph.yaml@main
 
 packages:
-  base: github://frangipool/esphome-config/packages/base.yaml@main
-  i2c_ads1115: github://frangipool/esphome-config/packages/i2c_ads1115.yaml@main
-  electrolyser: github://frangipool/esphome-config/packages/electrolyser.yaml@main
-  redox: github://frangipool/esphome-config/packages/redox.yaml@main
-  redox_electrolyser: github://frangipool/esphome-config/packages/redox_electrolyser.yaml@main
+  base: github://gaetanars/FrangiPool/packages/base.yaml@main
+  filtration: github://gaetanars/FrangiPool/packages/filtration.yaml@main
+  i2c_ads1115: github://gaetanars/FrangiPool/packages/i2c_ads1115.yaml@main
+  electrolyser: github://gaetanars/FrangiPool/packages/electrolyser.yaml@main
+  redox: github://gaetanars/FrangiPool/packages/redox.yaml@main
+  redox_electrolyser: github://gaetanars/FrangiPool/packages/redox_electrolyser.yaml@main
