@@ -7,7 +7,7 @@
 
 Configuration ESPHome pour l'automatisation d'une piscine à sel sur ESP32. La filtration est gérée directement par l'ESP — calcul des horaires, démarrage et arrêt de la pompe — sans aucune automatisation Home Assistant requise. HA reste utile pour la supervision et les notifications, mais son absence ou son redémarrage n'interrompt pas la filtration.
 
-PCB disponible : [frangipool/pcb](https://github.com/frangipool/pcb)
+PCB intégré au monorepo sous [pcb/](pcb/) — détails matériels et Gerbers prêts pour fabrication ci-dessous.
 
 ## Prérequis
 
@@ -242,6 +242,28 @@ Pour les utilisateurs souhaitant composer une configuration personnalisée :
 | `packages/redox.yaml` | Capteur Redox/ORP (ADS1115 A0), boutons de calibration, capteur de tendance |
 | `packages/ph.yaml` | Capteur pH (ADS1115 A1), bouton de calibration |
 | `packages/redox_electrolyser.yaml` | Auto-régulation Redox de l'électrolyseur, Mode Off/Auto/Forcé, seuils Redox |
+
+## PCB
+
+Le PCB qui héberge l'ESP32 et ses capteurs est sous [pcb/](pcb/). Voir [pcb/README.md](pcb/README.md) pour le détail matériel (ADS1115, bus 1-Wire, connecteurs Nextion/I2C).
+
+![Vue 2D du PCB](pcb/images/Vue_2D.svg)
+
+Les Gerbers prêts pour fabrication sont publiés en tant qu'asset `gerber.zip` sur chaque [GitHub release](https://github.com/gaetanars/FrangiPool/releases) — téléchargez-les et envoyez-les au fabricant de votre choix (JLCPCB, PCBWay, etc.).
+
+## Couper une release
+
+Une release unifiée (firmware + `gerber.zip`) est produite à chaque tag `v*.*.*` par [.github/workflows/release.yml](.github/workflows/release.yml).
+
+1. Se placer sur `main` à jour : `git checkout main && git pull`.
+2. Vérifier qu'il y a des commits [Conventional Commits](https://www.conventionalcommits.org/) depuis le dernier tag.
+3. **Toujours tagger un commit déjà sur `main`** — jamais depuis une feat branch ou un état détaché. La workflow refuse les tags pointant sur un commit absent de `origin/main`.
+4. Pousser le tag et la branche ensemble : `git tag v<x.y.z> && git push origin main v<x.y.z>`.
+5. Vérifier dans l'onglet Actions que la workflow est `success`, puis sur la page [Releases](https://github.com/gaetanars/FrangiPool/releases) que `gerber.zip` est bien attaché.
+
+Le tag doit matcher la regex `v[0-9]+.[0-9]+.[0-9]+` (pas de suffixes `-rc`, `-test`, etc. — ceux-là ne déclenchent pas la workflow).
+
+Pour retagger (force-push d'un tag existant) : supprimer d'abord la release GitHub (`gh release delete v<x.y.z> --yes`), sinon la workflow s'arrête avec une erreur explicite.
 
 ## Relais Active-LOW
 
