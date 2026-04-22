@@ -93,6 +93,13 @@ views:
               - entity: sensor.frangipool_mode_auto_actif
                 name: Mode Auto actif
 
+          # Diagnostics electrolyse (toujours visible — electrolyser.yaml dans tous les presets)
+          - type: entities
+            title: Electrolyse
+            entities:
+              - entity: sensor.frangipool_duree_electrolyse
+                name: Durée session (min)
+
           # ==============================================================
           # SECTION 2 — GRAPHIQUES HISTORIQUES (7 jours)
           # ==============================================================
