@@ -251,6 +251,20 @@ Le PCB qui héberge l'ESP32 et ses capteurs est sous [pcb/](pcb/). Voir [pcb/REA
 
 Les Gerbers prêts pour fabrication sont publiés en tant qu'asset `gerber.zip` sur chaque [GitHub release](https://github.com/gaetanars/FrangiPool/releases) — téléchargez-les et envoyez-les au fabricant de votre choix (JLCPCB, PCBWay, etc.).
 
+## Couper une release
+
+Une release unifiée (firmware + `gerber.zip`) est produite à chaque tag `v*.*.*` par [.github/workflows/release.yml](.github/workflows/release.yml).
+
+1. Se placer sur `main` à jour : `git checkout main && git pull`.
+2. Vérifier qu'il y a des commits [Conventional Commits](https://www.conventionalcommits.org/) depuis le dernier tag.
+3. **Toujours tagger un commit déjà sur `main`** — jamais depuis une feat branch ou un état détaché. La workflow refuse les tags pointant sur un commit absent de `origin/main`.
+4. Pousser le tag et la branche ensemble : `git tag v<x.y.z> && git push origin main v<x.y.z>`.
+5. Vérifier dans l'onglet Actions que la workflow est `success`, puis sur la page [Releases](https://github.com/gaetanars/FrangiPool/releases) que `gerber.zip` est bien attaché.
+
+Le tag doit matcher la regex `v[0-9]+.[0-9]+.[0-9]+` (pas de suffixes `-rc`, `-test`, etc. — ceux-là ne déclenchent pas la workflow).
+
+Pour retagger (force-push d'un tag existant) : supprimer d'abord la release GitHub (`gh release delete v<x.y.z> --yes`), sinon la workflow s'arrête avec une erreur explicite.
+
 ## Relais Active-LOW
 
 Le PCB FrangiPool utilise des relais à logique **Active-LOW** : le relais se ferme (charge activée) quand la broche GPIO est à l'état bas (LOW), et s'ouvre quand elle est à l'état haut (HIGH).

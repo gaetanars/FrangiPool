@@ -13,6 +13,7 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
         with:
@@ -29,7 +30,19 @@ jobs:
             exit 1
           fi
 
-      - name: Update CHANGELOG
+      # Garde anti-remplacement silencieux : un force-retag sur un tag déjà publié
+      # écraserait la release existante sans trace. On exige une suppression
+      # explicite de la release avant de pouvoir retagger.
+      - name: Fail fast if release already exists
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view "${{ github.ref_name }}" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            echo "::error::Release ${{ github.ref_name }} already exists. Delete it explicitly (gh release delete ${{ github.ref_name }} --yes) before retagging."
+            exit 1
+          fi
+
+      - name: Generate release notes + update CHANGELOG
         id: changelog
         uses: requarks/changelog-action@b78a3354a01f4a1affb484b9264b506a815c46b1  # v1.10.3
         with:
@@ -42,7 +55,18 @@ jobs:
           excludeScopes: changelog
 
       - name: Zip Gerbers
-        run: cd pcb/src && zip -r ../../gerber.zip .
+        run: |
+          cd pcb/src && zip -r ../../gerber.zip .
+          echo "- Zipped pcb/src into gerber.zip for ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+
+      - name: Validate gerber.zip contents
+        run: |
+          # Garde C12 : refuse de publier un asset vide (ex: pcb/src/ accidentellement vidé).
+          if ! unzip -l gerber.zip | grep -qE '\.(GTL|GBL|GKO|GBS|GTO|GTS|DRL)$'; then
+            echo "::error::gerber.zip is missing Gerber/DRL files — refusing to publish."
+            exit 1
+          fi
+          echo "- Validated gerber.zip has Gerber/DRL entries" >> $GITHUB_STEP_SUMMARY
 
       - name: Compose release body (prepend PCB-unchanged note when applicable)
         id: release_notes
@@ -52,27 +76,19 @@ jobs:
         env:
           CHANGELOG_BODY: ${{ steps.changelog.outputs.changes }}
         run: |
+          delimiter="BODY_$(openssl rand -hex 16)"
           prev_tag=$(git describe --tags --abbrev=0 "${{ github.ref_name }}^" 2>/dev/null || echo "")
           pcb_note=""
           if [ -n "$prev_tag" ] && [ -z "$(git log --name-only "${prev_tag}..${{ github.sha }}" -- pcb/ | grep .)" ]; then
-            pcb_note=$'> **Note matérielle** : PCB inchangé depuis v0.1.0 (2023-06-08). Le `gerber.zip` attaché est identique à celui du précédent release.\n\n'
+            pcb_note="> **Note matérielle** : PCB inchangé depuis ${prev_tag}. Le \`gerber.zip\` attaché est identique à celui du précédent release."$'\n\n'
           fi
           {
-            echo 'body<<BODY_EOF'
+            echo "body<<${delimiter}"
             printf '%s' "$pcb_note"
             printf '%s\n' "$CHANGELOG_BODY"
-            echo 'BODY_EOF'
+            echo "${delimiter}"
           } >> "$GITHUB_OUTPUT"
-
-      - name: Create or update GitHub Release
-        uses: ncipollo/release-action@339a81892b84b4eeb0f6e744e4574d79d0d9b8dd  # v1.21.0
-        with:
-          allowUpdates: true
-          makeLatest: true
-          name: ${{ github.ref_name }}
-          body: ${{ steps.release_notes.outputs.body }}
-          artifacts: gerber.zip
-          token: ${{ secrets.GITHUB_TOKEN }}
+          echo "- Composed release body for ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
 
       - name: Commit CHANGELOG.md update
         uses: stefanzweifel/git-auto-commit-action@04702edda442b2e678b25b537cec683a1493fcb9  # v7.1.0
@@ -82,3 +98,19 @@ jobs:
           # `[skip ci]` coupe le déclenchement de validate.yml sur ce commit.
           commit_message: 'docs(changelog): update CHANGELOG.md for ${{ github.ref_name }} [skip ci]'
           file_pattern: CHANGELOG.md
+
+      - name: Log CHANGELOG commit to step summary
+        run: echo "- CHANGELOG committed to main for ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+
+      - name: Create or update GitHub Release
+        uses: ncipollo/release-action@339a81892b84b4eeb0f6e744e4574d79d0d9b8dd  # v1.21.0
+        with:
+          allowUpdates: true
+          makeLatest: legacy
+          name: ${{ github.ref_name }}
+          body: ${{ steps.release_notes.outputs.body }}
+          artifacts: gerber.zip
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Log release creation to step summary
+        run: echo "- GitHub Release ${{ github.ref_name }} created/updated with gerber.zip" >> $GITHUB_STEP_SUMMARY
