@@ -7,7 +7,7 @@
 
 Configuration ESPHome pour l'automatisation d'une piscine à sel sur ESP32. La filtration est gérée directement par l'ESP — calcul des horaires, démarrage et arrêt de la pompe — sans aucune automatisation Home Assistant requise. HA reste utile pour la supervision et les notifications, mais son absence ou son redémarrage n'interrompt pas la filtration.
 
-PCB disponible : [frangipool/pcb](https://github.com/frangipool/pcb)
+PCB intégré au monorepo sous [pcb/](pcb/) — détails matériels et Gerbers prêts pour fabrication ci-dessous.
 
 ## Prérequis
 
@@ -242,6 +242,14 @@ Pour les utilisateurs souhaitant composer une configuration personnalisée :
 | `packages/redox.yaml` | Capteur Redox/ORP (ADS1115 A0), boutons de calibration, capteur de tendance |
 | `packages/ph.yaml` | Capteur pH (ADS1115 A1), bouton de calibration |
 | `packages/redox_electrolyser.yaml` | Auto-régulation Redox de l'électrolyseur, Mode Off/Auto/Forcé, seuils Redox |
+
+## PCB
+
+Le PCB qui héberge l'ESP32 et ses capteurs est sous [pcb/](pcb/). Voir [pcb/README.md](pcb/README.md) pour le détail matériel (ADS1115, bus 1-Wire, connecteurs Nextion/I2C).
+
+![Vue 2D du PCB](pcb/images/Vue_2D.svg)
+
+Les Gerbers prêts pour fabrication sont publiés en tant qu'asset `gerber.zip` sur chaque [GitHub release](https://github.com/gaetanars/FrangiPool/releases) — téléchargez-les et envoyez-les au fabricant de votre choix (JLCPCB, PCBWay, etc.).
 
 ## Relais Active-LOW
 
