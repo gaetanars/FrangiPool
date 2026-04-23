@@ -55,7 +55,7 @@ jobs:
         # forward-looking d'une version non-latest. Guard empty rend l'erreur
         # bruyante au lieu de silencieuse.
         run: |
-          prev_tag=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | grep -v -Fx "${{ github.ref_name }}" | head -n1)
+          prev_tag=$(git tag --list 'v[0-9][0-9]*.[0-9][0-9]*.[0-9][0-9]*' --sort=-v:refname | grep -v -Fx "${{ github.ref_name }}" | head -n1)
           if [ -z "$prev_tag" ]; then
             echo "::error::No previous v-* tag found. Push a baseline firmware tag first."
             exit 1

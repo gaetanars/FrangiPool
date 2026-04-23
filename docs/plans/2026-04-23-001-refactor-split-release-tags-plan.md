@@ -62,7 +62,7 @@ Voir [l'origine](../brainstorms/2026-04-23-001-split-release-tags-requirements.m
 
 - **Mode `fromTag`/`toTag` avec tag précédent calculé en shell step** (R6, R7). Le mode par défaut `tag:` utilise `git describe` sans filtre de préfixe, ce qui sur `pcb-0.1.1` renvoie le dernier tag toutes catégories (`v0.2.0`) et pollue le changelog ou fait échouer l'action (`latestTag.name !== tag`). Pattern shell hardené : `prev_tag=$(git tag --list '<prefix>*' --sort=-v:refname | grep -v -Fx "${github.ref_name}" | head -n1)` suivi d'un guard `if [ -z "$prev_tag" ]; then echo '::error::No previous <prefix>-* tag found.'; exit 1; fi`. Le `grep -v -Fx` retire le tag courant par nom (pas par position), ce qui reste correct sur un retag forward-looking d'une version non-latest ; le guard empty rend l'erreur de bootstrap (seed tag manquant, tag supprimé manuellement) bruyante au lieu de silencieuse.
 - **Concurrency group `release-main` partagé entre les deux workflows** (R3). Sérialise tout accès à `main` (auto-commit CHANGELOG) en cas de push simultané `git push origin main v0.2.0 pcb-0.1.1`. `cancel-in-progress: false` pour queuer, pas interrompre. Per-workflow groups (`release-firmware` vs `release-pcb`) ne résoudraient PAS la race : elles serialisent les retags d'un même composant, pas la contention sur `main` entre composants.
-- **Bootstrap PCB via seed tag annotated `pcb-0.1.0` sur le commit `7ea5eab`** (R9). Alternative (workflow-level special case "no previous tag") rejetée : ajoute une branche conditionnelle dans la workflow exercée une seule fois, coût permanent vs coût one-shot d'un tag push. Le seed tag reste protégé par un guard `if: github.ref_name != 'pcb-0.1.0'` au niveau job dans release-pcb.yml, rendant la workflow idempotente à un push du seed fait par erreur après merge — l'ordering Unit 1 avant PR merge devient une recommandation, plus une dépendance dure.
+- **Bootstrap PCB via seed tag annotated `pcb-0.1.0` sur le commit `b5573bb`** (R9). **Note d'implémentation (2026-04-23) :** le commit d'import original `7ea5eab` a été squash-merged dans PR #7 et est devenu unreachable depuis `main`. Le seed est donc posé sur le squash-merge `b5573bb feat: fusionner frangipool/pcb dans le monorepo + release workflow (#7)` — premier commit de `main` qui contient `pcb/`. Alternative (workflow-level special case "no previous tag") rejetée : ajoute une branche conditionnelle dans la workflow exercée une seule fois, coût permanent vs coût one-shot d'un tag push. Le seed tag reste protégé par un guard `if: github.ref_name != 'pcb-0.1.0'` au niveau job dans release-pcb.yml, rendant la workflow idempotente à un push du seed fait par erreur après merge — l'ordering Unit 1 avant PR merge devient une recommandation, plus une dépendance dure.
 - **Tag-on-main guard refname-exact** (R3, inherited-and-upgraded). Au lieu de `git branch -r --contains "$SHA" | grep -q 'origin/main$'` (faux positif si un autre remote ou une branche `feat-main` existe — résidu connu de la learning doc), utiliser `git branch -r --contains "$SHA" --format='%(refname)' | grep -Fxq 'refs/remotes/origin/main'`. Match exact sur le refspec complet, immunisé au suffixe.
 - **Conservation du glob de trigger identique au regex de l'origine** : `v[0-9]+.[0-9]+.[0-9]+` et `pcb-[0-9]+.[0-9]+.[0-9]+`. Rejette les suffixes `-rc`, `-test`, `-beta` — alignement avec la procédure documentée dans le README actuel.
 - **Retrait de release.yml dans la même PR que l'ajout des deux nouvelles workflows** (Unit 5). Évite la fenêtre temporelle où (a) ajouter avant retirer déclencherait DEUX workflows sur le même tag `v*`, ou (b) retirer avant ajouter perdrait la release. Atomicité via PR unique.
@@ -133,11 +133,11 @@ Le `concurrency: release-main` serialise les jobs de bout en bout : une seule wo
 **Dependencies:** Aucune (doit précéder Unit 2, mais no-op pour la CI actuelle).
 
 **Files:**
-- Aucun fichier modifié. Action locale `git tag -a pcb-0.1.0 7ea5eab -m "..." && git push origin pcb-0.1.0`.
+- Aucun fichier modifié. Action locale `git tag -a pcb-0.1.0 b5573bb -m "..." && git push origin pcb-0.1.0`. (Cible `b5573bb` plutôt que `7ea5eab` parce que l'import original a été squash-merged et est unreachable depuis `main` — cf. note dans Key Technical Decisions.)
 
 **Approach:**
 - Tag annotated (pas lightweight) pour porter le message descriptif "Baseline imported from frangipool/pcb@v0.1.0 — seed for post-monorepo pcb-* release series".
-- Cible le commit d'import `7ea5eab feat(pcb): import hardware design from frangipool/pcb@cfd2e9f`.
+- Cible le squash-merge `b5573bb feat: fusionner frangipool/pcb dans le monorepo + release workflow (#7)` — le premier commit reachable sur `main` où `pcb/` a atterri.
 - Push avant le merge de la PR qui introduit `release-pcb.yml` : le trigger actuel `v[0-9]+.[0-9]+.[0-9]+` ne matche pas `pcb-*`, donc aucun workflow ne s'exécute.
 
 **Patterns to follow:**
@@ -342,4 +342,4 @@ Non-bloquant pour le merge — à exécuter sur la première paire de releases r
 - Related code: [.github/workflows/release.yml](../../.github/workflows/release.yml), [.github/workflows/validate.yml](../../.github/workflows/validate.yml), [README.md](../../README.md)
 - Learning: [docs/solutions/architecture/tag-triggered-release-workflow-hardening.md](../solutions/architecture/tag-triggered-release-workflow-hardening.md)
 - External: `Requarks/changelog-action@b78a3354` — action.yml inspected for `fromTag`/`toTag` + `changelogFilePath` inputs
-- Related PRs: #7 (monorepo merge) — context for commit `7ea5eab` (Unit 1 target)
+- Related PRs: #7 (monorepo merge) — squash-merge `b5573bb` is the Unit 1 seed target.

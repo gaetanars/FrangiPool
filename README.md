@@ -249,7 +249,7 @@ Le PCB qui héberge l'ESP32 et ses capteurs est sous [pcb/](pcb/). Voir [pcb/REA
 
 ![Vue 2D du PCB](pcb/images/Vue_2D.svg)
 
-Les Gerbers prêts pour fabrication sont publiés en tant qu'asset `gerber.zip` sur chaque [GitHub release](https://github.com/gaetanars/FrangiPool/releases) — téléchargez-les et envoyez-les au fabricant de votre choix (JLCPCB, PCBWay, etc.).
+Les Gerbers prêts pour fabrication sont publiés en tant qu'asset `gerber.zip` sur les [GitHub releases PCB](https://github.com/gaetanars/FrangiPool/releases) (tags `pcb-*.*.*`) — téléchargez-les et envoyez-les au fabricant de votre choix (JLCPCB, PCBWay, etc.). Les releases firmware (tags `v*.*.*`) n'attachent pas de Gerbers ; utiliser la dernière release PCB pour la fabrication.
 
 ## Couper une release
 
@@ -292,7 +292,7 @@ Le tag doit matcher la regex `pcb-[0-9]+.[0-9]+.[0-9]+`. Le premier tag PCB sous
 
 > **Seed baseline tag — `pcb-0.1.0`**
 >
-> Le tag `pcb-0.1.0` est un seed baseline immutable posé sur le commit d'import monorepo (`7ea5eab feat(pcb): import hardware design from frangipool/pcb@cfd2e9f`). **NE JAMAIS le supprimer, le déplacer, ni le retagger.** Il sert d'ancre pour `git tag --list 'pcb-*'` et sa disparition casserait le `prev_tag` lookup de toutes les releases PCB futures. Si le tag est pushé par erreur (p.ex. après merge), `release-pcb.yml` saute proprement via son guard `if: github.ref_name != 'pcb-0.1.0'` — aucune release créée.
+> Le tag `pcb-0.1.0` est un seed baseline immutable posé sur le commit `b5573bb feat: fusionner frangipool/pcb dans le monorepo + release workflow (#7)` — le squash-merge où `pcb/` a atterri sur `main`. **NE JAMAIS le supprimer, le déplacer, ni le retagger.** Il sert d'ancre pour `git tag --list 'pcb-*'` et sa disparition casserait le `prev_tag` lookup de toutes les releases PCB futures. Si le tag est pushé par erreur (p.ex. après merge), `release-pcb.yml` saute proprement via son guard `if: github.ref_name != 'pcb-0.1.0'` — aucune release créée.
 
 **Retag forward-looking** d'un tag PCB (`pcb-0.1.1` ou suivant) : même procédure que pour firmware, substituer le prefix.
 
