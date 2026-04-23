@@ -1,0 +1,126 @@
+name: Release PCB
+
+on:
+  push:
+    tags:
+      - 'pcb-[0-9]+.[0-9]+.[0-9]+'
+
+# contents: write requis pour (a) release-action, (b) auto-commit du CHANGELOG.
+permissions:
+  contents: write
+
+# Concurrency group partagé avec release-firmware.yml — voir cette workflow
+# pour la rationale.
+concurrency:
+  group: release-main
+  cancel-in-progress: false
+
+jobs:
+  release:
+    # Guard seed-baseline : `pcb-0.1.0` est un baseline annotated tag posé sur le
+    # commit d'import monorepo. Un push (accidentel ou volontaire) ne doit pas
+    # créer de release — il sert uniquement d'ancre pour `git tag --list 'pcb-*'`.
+    # Rend la workflow idempotente à un push post-merge du seed.
+    if: github.ref_name != 'pcb-0.1.0'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        with:
+          fetch-depth: 0
+
+      - name: Verify tag commit is on origin/main
+        # Refname-exact match (voir release-firmware.yml pour la rationale).
+        run: |
+          git fetch origin main --quiet
+          if ! git branch -r --contains "${{ github.sha }}" --format='%(refname)' | grep -Fxq 'refs/remotes/origin/main'; then
+            echo "::error::Tag ${{ github.ref_name }} points to a commit absent from origin/main. Refusing to release."
+            exit 1
+          fi
+
+      - name: Fail fast if release already exists
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view "${{ github.ref_name }}" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            echo "::error::Release ${{ github.ref_name }} already exists. Delete it explicitly (gh release delete ${{ github.ref_name }} --yes) before retagging."
+            exit 1
+          fi
+
+      - name: Compute previous PCB tag
+        id: prev
+        # Skip-by-name + empty-guard (voir release-firmware.yml).
+        run: |
+          prev_tag=$(git tag --list 'pcb-[0-9][0-9]*.[0-9][0-9]*.[0-9][0-9]*' --sort=-v:refname | grep -v -Fx "${{ github.ref_name }}" | head -n1)
+          if [ -z "$prev_tag" ]; then
+            echo "::error::No previous pcb-* tag found. The pcb-0.1.0 seed baseline tag must exist — see README 'Couper une release PCB'."
+            exit 1
+          fi
+          echo "prev_tag=$prev_tag" >> "$GITHUB_OUTPUT"
+          echo "- Previous PCB tag: $prev_tag" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Generate release notes + update pcb/CHANGELOG.md
+        id: changelog
+        uses: requarks/changelog-action@b78a3354a01f4a1affb484b9264b506a815c46b1  # v1.10.3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fromTag: ${{ github.ref_name }}
+          toTag: ${{ steps.prev.outputs.prev_tag }}
+          changelogFilePath: pcb/CHANGELOG.md
+          excludeTypes: chore,style,build
+          # Un tag `pcb-*` implique que le PCB a changé — on ne filtre pas les
+          # scopes firmware qui pourraient coexister dans le range.
+          excludeScopes: changelog
+
+      - name: Zip Gerbers
+        run: |
+          cd pcb/src && zip -r ../../gerber.zip .
+          echo "- Zipped pcb/src into gerber.zip for ${{ github.ref_name }}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Validate gerber.zip contents
+        # Garde C12 : refuse de publier un asset vide (ex: pcb/src/ accidentellement vidé).
+        run: |
+          if ! unzip -l gerber.zip | grep -iqE '\.(GTL|GBL|GKO|GBS|GTO|GTS|DRL)$'; then
+            echo "::error::gerber.zip is missing Gerber/DRL files — refusing to publish."
+            exit 1
+          fi
+          echo "- Validated gerber.zip has Gerber/DRL entries" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Compose release body
+        id: release_notes
+        env:
+          CHANGELOG_BODY: ${{ steps.changelog.outputs.changes }}
+        run: |
+          delimiter="BODY_$(openssl rand -hex 16)"
+          {
+            echo "body<<${delimiter}"
+            printf '%s\n' "$CHANGELOG_BODY"
+            echo "${delimiter}"
+          } >> "$GITHUB_OUTPUT"
+          echo "- Composed release body for ${{ github.ref_name }}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Commit pcb/CHANGELOG.md update
+        uses: stefanzweifel/git-auto-commit-action@04702edda442b2e678b25b537cec683a1493fcb9  # v7.1.0
+        with:
+          branch: main
+          # Commit message nomme explicitement le fichier touché pour l'audit trail.
+          commit_message: 'docs(changelog): update pcb/CHANGELOG.md for ${{ github.ref_name }} [skip ci]'
+          file_pattern: pcb/CHANGELOG.md
+
+      - name: Log CHANGELOG commit to step summary
+        run: echo "- pcb/CHANGELOG.md committed to main for ${{ github.ref_name }}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Create or update GitHub Release
+        uses: ncipollo/release-action@339a81892b84b4eeb0f6e744e4574d79d0d9b8dd  # v1.21.0
+        with:
+          allowUpdates: true
+          # `makeLatest: false` garde le badge "latest release" sur le firmware —
+          # la release PCB reste visible mais n'écrase jamais la plus récente firmware.
+          makeLatest: false
+          name: ${{ github.ref_name }}
+          body: ${{ steps.release_notes.outputs.body }}
+          artifacts: gerber.zip
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Log release creation to step summary
+        run: echo "- GitHub Release ${{ github.ref_name }} created/updated with gerber.zip (PCB, makeLatest:false)" >> "$GITHUB_STEP_SUMMARY"
