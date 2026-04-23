@@ -253,17 +253,55 @@ Les Gerbers prêts pour fabrication sont publiés en tant qu'asset `gerber.zip` 
 
 ## Couper une release
 
-Une release unifiée (firmware + `gerber.zip`) est produite à chaque tag `v*.*.*` par [.github/workflows/release.yml](.github/workflows/release.yml).
+Firmware et PCB ont des cycles de vie indépendants. Deux workflows tag-triggered, miroirs, produisent chacune leurs releases :
+
+- [.github/workflows/release-firmware.yml](.github/workflows/release-firmware.yml) — tags `v*.*.*`, écrit dans `CHANGELOG.md`, aucun asset attaché.
+- [.github/workflows/release-pcb.yml](.github/workflows/release-pcb.yml) — tags `pcb-*.*.*`, écrit dans `pcb/CHANGELOG.md`, asset `gerber.zip` attaché.
+
+Les deux workflows partagent un `concurrency:` group `release-main` — un push combiné `git push origin main v0.2.0 pcb-0.1.1` sérialise proprement les deux auto-commits `main` sans fenêtre de race.
+
+### Couper une release firmware (`v*`)
 
 1. Se placer sur `main` à jour : `git checkout main && git pull`.
-2. Vérifier qu'il y a des commits [Conventional Commits](https://www.conventionalcommits.org/) depuis le dernier tag.
+2. Vérifier les commits [Conventional Commits](https://www.conventionalcommits.org/) depuis le dernier tag `v*.*.*`.
 3. **Toujours tagger un commit déjà sur `main`** — jamais depuis une feat branch ou un état détaché. La workflow refuse les tags pointant sur un commit absent de `origin/main`.
-4. Pousser le tag et la branche ensemble : `git tag v<x.y.z> && git push origin main v<x.y.z>`.
-5. Vérifier dans l'onglet Actions que la workflow est `success`, puis sur la page [Releases](https://github.com/gaetanars/FrangiPool/releases) que `gerber.zip` est bien attaché.
+4. Pousser le tag : `git tag vX.Y.Z && git push origin main vX.Y.Z`.
+5. Vérifier dans l'onglet Actions que `release-firmware.yml` est `success`, puis sur la page [Releases](https://github.com/gaetanars/FrangiPool/releases) que la nouvelle release est créée (firmware n'attache pas d'asset — c'est attendu).
 
-Le tag doit matcher la regex `v[0-9]+.[0-9]+.[0-9]+` (pas de suffixes `-rc`, `-test`, etc. — ceux-là ne déclenchent pas la workflow).
+Le tag doit matcher la regex `v[0-9]+.[0-9]+.[0-9]+` (pas de suffixes `-rc`, `-test`, etc.).
 
-Pour retagger (force-push d'un tag existant) : supprimer d'abord la release GitHub (`gh release delete v<x.y.z> --yes`), sinon la workflow s'arrête avec une erreur explicite.
+**Retag forward-looking** (corriger un tag qui vient d'être publié) : supprimer d'abord la release GitHub, puis retirer le tag local et remote, puis re-tagger.
+
+```bash
+gh release delete vX.Y.Z --yes
+git tag -d vX.Y.Z
+git push origin :refs/tags/vX.Y.Z
+# corriger, puis retagger via l'étape 4 ci-dessus
+```
+
+Le retag des tags historiques `v0.0.1` et `v0.1.0` est explicitement hors-scope — ils restent intouchés.
+
+### Couper une release PCB (`pcb-*`)
+
+1. Se placer sur `main` à jour après une modification matérielle (nouveaux Gerbers sous `pcb/src/`).
+2. Vérifier les commits Conventional Commits avec scope `pcb(*)` depuis le dernier tag `pcb-*.*.*`.
+3. Tag sur un commit de `main` : `git tag pcb-X.Y.Z && git push origin main pcb-X.Y.Z`.
+4. Vérifier dans l'onglet Actions que `release-pcb.yml` est `success`, puis sur la page [Releases](https://github.com/gaetanars/FrangiPool/releases) que `gerber.zip` est attaché à `pcb-X.Y.Z` et que le badge "latest release" reste sur la dernière release firmware (PCB publie avec `makeLatest: false`).
+
+Le tag doit matcher la regex `pcb-[0-9]+.[0-9]+.[0-9]+`. Le premier tag PCB sous ce schéma est `pcb-0.1.1`, diffé contre le seed baseline `pcb-0.1.0`.
+
+> **Seed baseline tag — `pcb-0.1.0`**
+>
+> Le tag `pcb-0.1.0` est un seed baseline immutable posé sur le commit d'import monorepo (`7ea5eab feat(pcb): import hardware design from frangipool/pcb@cfd2e9f`). **NE JAMAIS le supprimer, le déplacer, ni le retagger.** Il sert d'ancre pour `git tag --list 'pcb-*'` et sa disparition casserait le `prev_tag` lookup de toutes les releases PCB futures. Si le tag est pushé par erreur (p.ex. après merge), `release-pcb.yml` saute proprement via son guard `if: github.ref_name != 'pcb-0.1.0'` — aucune release créée.
+
+**Retag forward-looking** d'un tag PCB (`pcb-0.1.1` ou suivant) : même procédure que pour firmware, substituer le prefix.
+
+```bash
+gh release delete pcb-X.Y.Z --yes
+git tag -d pcb-X.Y.Z
+git push origin :refs/tags/pcb-X.Y.Z
+# corriger, puis retagger via l'étape 3 ci-dessus
+```
 
 ## Relais Active-LOW
 
