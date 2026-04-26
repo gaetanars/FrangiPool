@@ -2,10 +2,10 @@
 title: Asymmetric ORP regulation policy — fast OFF, gated ON (eliminate parallel control paths)
 category: architecture
 date: 2026-04-21
-last_updated: 2026-04-21
+last_updated: 2026-04-26
 module: redox_electrolyser
 component: regulation-loop
-tags: [esphome, regulation, hysteresis, noise-filtering, dead-code, control-loop, functional-safety, pool-chemistry, asymmetric-control]
+tags: [esphome, regulation, hysteresis, noise-filtering, dead-code, control-loop, functional-safety, pool-chemistry, asymmetric-control, simplification]
 related_commits: [40156a6, 4358410]
 related_todos: ["003"]
 problem_type: logic_error
@@ -145,19 +145,35 @@ The counter-reset is important: without it, a user toggling Off→Auto could "in
    - `select.on_value` mode handlers (including Auto / else branches that look like "just a transition")
    - `button.on_press` lambdas (including HA-exposed force buttons)
    - `api.actions` (force/recalc callable from HA automations)
-2. For each `turn_on` call found above: is it gated by `g_redox_stable_minutes >= 30` (or an equivalent debouncer)? If no gate, is it the explicitly documented Forcé-mode escape hatch? Anything else is a bypass.
-3. Are `turn_off` paths kept fast and unconditional (no stability gate on the safer direction)?
+2. For each `turn_on` call found above: is it inside the hysteresis interval (`pool_redox < setpoint - 30`, gated by mode = Auto, pump on, pump_uptime ≥ pump_uptime_delay) or the explicitly documented Forcé-mode escape hatch? Anything else is a bypass.
+3. Are `turn_off` paths kept fast and unconditional (no stability gate on the safer direction, NaN/0 ORP folded into the OFF direction)?
 4. Does `on_value_range` have both `above` and `below` branches, or only the safe-direction one (this PR: only `above`)?
-5. Does every `select.on_value` Auto branch reset `g_redox_stable_minutes` to 0? Without this reset, stability minutes carry over from prior modes and the gate measures the wrong window.
-6. Is the mode-transition backstop (interval re-evaluates on `Off → Auto`) preserved?
+5. Is the mode-transition backstop (interval re-evaluates on `Off → Auto`) preserved? Does the `select.on_value` Auto branch fail-safe to OFF on unknown ORP (NaN, 0 mV, or above-setpoint)?
 
-### Bench scenarios
+### Bench scenarios (post-2026-04-26 simplification)
 
-- Inject ORP dip for 15 min, restore: electrolyser stays OFF.
-- Hold ORP below setpoint for > 30 min: electrolyser activates on next interval tick.
-- ORP spike above setpoint: electrolyser OFF within one range-trigger cycle (seconds).
-- Switch mode Off → Auto with ORP already above setpoint: electrolyser remains OFF; interval confirms within one poll.
-- Toggle mode Auto → Off mid-stability-window: `redox_stable_minutes` resets cleanly.
+- First boot after factory flash with `g_store_pool_redox = 0.0`: electrolyser stays OFF for the full `pump_uptime_delay` window, then the regulator's NaN/0 guard skips until the sampler writes a real value.
+- ORP dip shorter than one interval tick (≈ 60 s): electrolyser stays OFF (dip resolves before next regulator tick captures `pool_redox`).
+- ORP sustained below `setpoint - 30`: electrolyser activates within ≤ 1 min (one interval tick after pump warm-up).
+- ORP above setpoint with electrolyser ON: electrolyser turns OFF within ≤ 1 min — gated by the `pool_redox` template-sensor publish rate, not "sub-seconde". `on_value_range.above` and the interval-OFF have equivalent latency.
+- Mode `Off → Auto` with `pool_redox` exactly at setpoint (boundary): electrolyser stays OFF (dead-band hold), no oscillation under ±1 mV jitter.
+
+## Update 2026-04-26: stability gate removed
+
+The 30-min stability counter (`g_redox_stable_minutes`) and the 5-min trend (`g_redox_trend_state`) were removed in [openspec/changes/simplify-redox-regulation/](../../../openspec/changes/simplify-redox-regulation/). The "ON path" is now a plain hysteresis decision in the `interval: 1min` block: `pool_redox > setpoint → turn_off`, `pool_redox < setpoint - 30 → turn_on`. The `on_value_range.above` fast-OFF safety net is **kept** as a single-direction writer (OFF only) — note its latency is ≤ 1 min (bounded by the `pool_redox` template-sensor publish rate), the same as the interval; the value of keeping it is event-style activation on threshold crossing rather than reduced latency. NaN/0 mV inputs are folded into the OFF direction in both the regulator and the `select.on_value` Auto branch (canonical pattern from [antifreeze-nan-silent-failure.md](antifreeze-nan-silent-failure.md)).
+
+**Why**: in practice the pump-uptime sampling already filters the transient noise the 30-min gate was meant to absorb. `pool_redox` is only refreshed when `pump_uptime ≥ pump_uptime_delay` (default 20 min after each pump start), and the underlying `realtime_redox` is itself a 12-sample sliding window. Stacking another temporal debouncer on top made the regulator feel "random" from the user's perspective: a legitimate dip below the low threshold could remain ignored for 30 min, and a brief excursion above the high threshold reset the counter. The new policy is direct: the displayed `pool_redox` value is what the regulator acts on, every minute, after pump warm-up.
+
+**What stays valid from this learning**:
+
+- The "enumerate all five writer types" review checklist (on_value_range / interval / select.on_value / button.on_press / api.actions) — still the correct discipline for any new edit to the electrolyser actuator. There is just one less gate to verify against.
+- The "name the authoritative handler per direction" design rule — still encoded in the new code: `interval: 1min` owns ON, OFF is owned by both the interval and the fast-OFF range trigger (single-direction asymmetry is preserved).
+- The genealogy of bypass bugs (parallel control paths that look orthogonal but aren't) — kept here as a cautionary tale before reintroducing any debouncer in the future.
+
+**What no longer applies**:
+
+- The `g_redox_stable_minutes >= 30` gate and the requirement to reset it on mode transitions — both globals are gone.
+- The "slow ON via stability gate" pattern as actually-implemented in this codebase — only the design rule (asymmetric severity by failure mode) survives; the specific 30-min instance was retired.
 
 ## Related
 
@@ -167,4 +183,5 @@ The counter-reset is important: without it, a user toggling Off→Auto could "in
 - Fix commit `40156a6` — `fix(redox): asymmetric regulation policy — fast OFF, slow ON` (first bypass: `on_value_range below:` removed).
 - Follow-up fix commit `4358410` — `fix(review): apply ce-code-review findings on PR #6` (second bypass: `select.on_value` Auto branch removed; stability-counter reset added).
 - [antifreeze-nan-silent-failure.md](antifreeze-nan-silent-failure.md) — sibling architectural learning from the same PR; another single-writer-per-safety-input pattern in this codebase.
-- `README.md` line 164 — user-facing redox setpoint description; wording "s'active à -30 mV et se coupe à la consigne" remains accurate in intent but may warrant a clarifying sentence about the 30-min stability gate for future reads.
+- `README.md` line 164 — user-facing redox setpoint description; wording "s'active à -30 mV et se coupe à la consigne" remains accurate and is now a literal description of the implementation (no caveat about a stability gate needed since 2026-04-26).
+- [openspec/changes/simplify-redox-regulation/](../../../openspec/changes/simplify-redox-regulation/) — proposal, design and tasks for the 2026-04-26 simplification.

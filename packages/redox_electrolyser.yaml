@@ -1,18 +1,27 @@
-# Politique de régulation asymétrique :
-#   OFF rapide (protection sur-chloration) : on_value_range above setpoint
-#     → l'électrolyseur se coupe dès le franchissement supérieur (réaction en secondes).
-#   ON lent (filtre bruit capteur) : interval 1min + g_redox_stable_minutes >= 30
-#     → l'électrolyseur ne démarre qu'après 30 min de tendance Redox non-montante
-#       (g_redox_trend_state <= 0) avec ORP < setpoint - 30 mV. Les dips transitoires
-#       (bruit, agitation) sont ignorés.
-# Le bloc OFF de l'interval sert de filet pour les cas sans franchissement
-# (ex. passage Off → Auto alors qu'ORP est déjà au-dessus du setpoint).
-
-globals:
-  - id: g_redox_stable_minutes
-    type: int
-    restore_value: true
-    initial_value: '0'
+# Politique de régulation simplifiée :
+#   Hystérésis pure sur `pool_redox` (mesure échantillonnée — `realtime_redox` n'est
+#   copié dans `g_store_pool_redox` que quand la pompe tourne depuis au moins
+#   `pump_uptime_delay` minutes ; cf. packages/redox.yaml interval 1 min).
+#   Le régulateur 1 minute applique : ORP > setpoint → OFF, ORP < setpoint - 30 → ON,
+#   sinon conserve l'état courant. Aucun débouncer additionnel (compteur de stabilité,
+#   tendance Redox, etc.) — le sampling pump-uptime est le seul filtre temporel.
+#
+#   NaN / 0 mV sont ignorés au début de chaque branche : `g_store_pool_redox` est
+#   `restore_value: true` sans `initial_value`, donc zero-init à 0.0f sur premier
+#   flash, et la chaîne ADS1115 peut produire NaN sur défaillance I²C. La garde
+#   suit le pattern canonique de docs/solutions/architecture/antifreeze-nan-silent-failure.md.
+#
+#   Filet OFF par franchissement : `sensor.pool_redox.on_value_range.above` coupe
+#   en mode Auto au prochain publish de `pool_redox` si l'ORP franchit le setpoint
+#   (max 1 min — même latence que l'interval, mais déclenché par l'événement de
+#   franchissement plutôt que par le tick périodique). Single-direction writer
+#   (OFF uniquement) — ne contredit pas l'hystérésis. Préservé comme garde
+#   anti-surchloration.
+#
+#   Note : tout writer vers `electrolyser` doit être audité parmi les cinq types
+#   (on_value_range / interval / select.on_value / button.on_press / api.actions).
+#   Cf. docs/solutions/architecture/redox-asymmetric-regulation-policy.md (généalogie
+#   du fix) — la liste de review-checklist reste valide ; seule la politique a changé.
 
 select:
   - platform: template
@@ -34,14 +43,12 @@ select:
           } else if (id(electrolyser_mode).state == "Forcé") {
             id(electrolyser).turn_on();
           } else {
-            // Mode Auto : laisser l'intervalle régulateur (gate 30 min) décider du turn_on.
-            // On se contente de couper si l'ORP est déjà au-dessus du setpoint (filet OFF rapide)
-            // et de réinitialiser le compteur de stabilité pour que l'allumage attende une vraie
-            // fenêtre stable après la bascule de mode.
-            if (id(pool_redox).state > id(redox_setpoint).state) {
+            // Mode Auto : fail-safe OFF si l'ORP est inconnu (NaN / 0) ou déjà
+            // au-dessus du setpoint. Sinon l'interval 1 min décide au prochain tick.
+            float r = id(pool_redox).state;
+            if (std::isnan(r) || r <= 0.0f || r > id(redox_setpoint).state) {
               id(electrolyser).turn_off();
             }
-            id(g_redox_stable_minutes) = 0;
           }
 
 number:
@@ -71,34 +78,19 @@ sensor:
 interval:
   - interval: 1min
     then:
-      - if:
-          condition:
-            lambda: 'return (int)id(g_redox_trend_state) <= 0;'
-          then:
-            - lambda: 'id(g_redox_stable_minutes) += 1;'
-          else:
-            - lambda: 'id(g_redox_stable_minutes) = 0;'
-      - delay: 10s
       - lambda: |-
           if (id(electrolyser_mode).state != "Auto") return;
-
-          if (!id(pump).state || (id(pump_uptime).state < id(pump_uptime_delay).state)) {
-            return;
-          }
+          if (!id(pump).state) return;
+          if (id(pump_uptime).state < id(pump_uptime_delay).state) return;
 
           float current = id(pool_redox).state;
-          float minr = id(redox_setpoint).state - 30;
-          float maxr = id(redox_setpoint).state;
-          int stable_minutes = id(g_redox_stable_minutes);
+          if (std::isnan(current) || current <= 0.0f) return;
 
-          if ((current > maxr) && (id(electrolyser).state)) {
+          float low  = id(redox_setpoint).state - 30.0f;
+          float high = id(redox_setpoint).state;
+
+          if (current > high && id(electrolyser).state) {
             id(electrolyser).turn_off();
-            return;
-          }
-
-          if ((current < minr) && (!id(electrolyser).state)) {
-            if (stable_minutes >= 30) {
-              id(electrolyser).turn_on();
-            }
-            return;
+          } else if (current < low && !id(electrolyser).state) {
+            id(electrolyser).turn_on();
           }

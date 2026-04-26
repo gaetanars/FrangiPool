@@ -5,14 +5,6 @@ globals:
   - id: g_redox_offset
     type: float
     restore_value: true
-  - id: g_last_redox_trend_value
-    type: float
-    restore_value: true
-    initial_value: '0.0'
-  - id: g_redox_trend_state
-    type: int
-    restore_value: no
-    initial_value: '0'
 
 number:
   - platform: template
@@ -73,19 +65,6 @@ sensor:
     entity_category: diagnostic
     id: redox_offset_sensor
     lambda: return id(g_redox_offset);
-
-text_sensor:
-  - platform: template
-    name: "Tendance Redox"
-    entity_category: diagnostic
-    lambda: |-
-      if (id(g_redox_trend_state) == 1) {
-        return {"En montée"};
-      } else if (id(g_redox_trend_state) == -1) {
-        return {"En descente"};
-      } else {
-        return {"Stable"};
-      }
 
 button:
   - platform: template
@@ -152,18 +131,11 @@ interval:
           then:
             - globals.set:
                 id: g_store_pool_redox
-                value: !lambda "return id(realtime_redox).state;"
-
-  - interval: 5min
-    then:
-      - lambda: |-
-          float current = id(realtime_redox).state;
-          float diff = current - id(g_last_redox_trend_value);
-          if (diff > 2) {
-            id(g_redox_trend_state) = 1;
-          } else if (diff < -2) {
-            id(g_redox_trend_state) = -1;
-          } else {
-            id(g_redox_trend_state) = 0;
-          }
-          id(g_last_redox_trend_value) = current;
+                value: !lambda |-
+                  // Préserver le dernier échantillon valide en cas de défaillance I²C
+                  // ADS1115 : NaN persisté dans la NVS (restore_value: true) survivrait
+                  // au reboot et figerait l'hystérésis sur l'état restauré du relais
+                  // (RESTORE_DEFAULT_ON sur l'electrolyseur). Pattern canonique :
+                  // docs/solutions/architecture/antifreeze-nan-silent-failure.md.
+                  float v = id(realtime_redox).state;
+                  return std::isnan(v) ? id(g_store_pool_redox) : v;
