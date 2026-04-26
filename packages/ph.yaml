@@ -50,6 +50,23 @@ globals:
     type: int
     restore_value: True
     initial_value: '0'
+  # Scratch globals utilises uniquement par _ph_calibration (non restored).
+  - id: g_ph_abort
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+  - id: g_ph_cap_a
+    type: float
+    restore_value: no
+    initial_value: '0.0'
+  - id: g_ph_cap_b
+    type: float
+    restore_value: no
+    initial_value: '0.0'
+  - id: g_ph_cap_c
+    type: float
+    restore_value: no
+    initial_value: '0.0'
 
 sensor:
   - platform: ads1115
@@ -143,6 +160,313 @@ text_sensor:
         default:
           return {std::string("")};
       }
+
+script:
+  # Sequence atomique pH 7 -> pH 4 avec multi-capture, NaN guards, et
+  # garde-fous stricts sur la pente. Verrou g_ph_calibration_in_progress
+  # active sur tous les chemins de sortie. mode: single ignore les
+  # re-presses pendant l'execution.
+  - id: _ph_calibration
+    mode: single
+    then:
+      # Init : verrouille le bouton reset et reset le flag d'abort.
+      - lambda: |-
+          id(g_ph_calibration_in_progress) = true;
+          id(g_ph_abort) = false;
+
+      # Etape 1 : notif "plonger dans pH 7"
+      - if:
+          condition:
+            api.connected:
+          then:
+            - homeassistant.action:
+                action: persistent_notification.create
+                data:
+                  title: FrangiPool - Calibration pH
+                data_template:
+                  message: 'Plonger la sonde dans le tampon pH 7.00 et attendre la stabilisation (~190s).'
+
+      # Etape 2 : delai de stabilisation pH 7
+      - delay: 180s
+
+      # Etape 3 : multi-capture pH 7 (3 echantillons espaces de 5s)
+      - lambda: |-
+          if (id(g_ph_abort)) return;
+          float v = id(ads1115_a1).state;
+          if (std::isnan(v)) {
+            id(g_ph_last_result_code) = 4;
+            id(g_ph_abort) = true;
+            return;
+          }
+          id(g_ph_cap_a) = v;
+      - delay: 5s
+      - lambda: |-
+          if (id(g_ph_abort)) return;
+          float v = id(ads1115_a1).state;
+          if (std::isnan(v)) {
+            id(g_ph_last_result_code) = 4;
+            id(g_ph_abort) = true;
+            return;
+          }
+          id(g_ph_cap_b) = v;
+      - delay: 5s
+      - lambda: |-
+          if (id(g_ph_abort)) return;
+          float v = id(ads1115_a1).state;
+          if (std::isnan(v)) {
+            id(g_ph_last_result_code) = 4;
+            id(g_ph_abort) = true;
+            return;
+          }
+          id(g_ph_cap_c) = v;
+      # Spread check pH 7 + ecriture g_v_ph7
+      - lambda: |-
+          if (id(g_ph_abort)) return;
+          float a = id(g_ph_cap_a), b = id(g_ph_cap_b), c = id(g_ph_cap_c);
+          float min_v = std::min({a, b, c});
+          float max_v = std::max({a, b, c});
+          if (max_v - min_v > 0.050f) {
+            id(g_ph_last_result_code) = 6;
+            id(g_ph_abort) = true;
+            return;
+          }
+          id(g_v_ph7) = (a + b + c) / 3.0f;
+
+      # Abort handler pH 7 : notif explicite + cleanup + stop.
+      - if:
+          condition: { lambda: 'return id(g_ph_abort);' }
+          then:
+            - if:
+                condition:
+                  api.connected:
+                then:
+                  - homeassistant.action:
+                      action: persistent_notification.create
+                      data:
+                        title: FrangiPool - Calibration pH échouée
+                      data_template:
+                        message: !lambda |-
+                          if (id(g_ph_last_result_code) == 4) {
+                            return std::string("Capteur indisponible (NaN) pendant la capture pH 7. Calibration abandonnée.");
+                          }
+                          char buf[96];
+                          float a = id(g_ph_cap_a), b = id(g_ph_cap_b), c = id(g_ph_cap_c);
+                          float spread_mv = (std::max({a, b, c}) - std::min({a, b, c})) * 1000.0f;
+                          snprintf(buf, sizeof(buf), "Capture pH 7 instable (spread=%.0fmV > 50mV). Calibration abandonnée.", spread_mv);
+                          return std::string(buf);
+            - lambda: 'id(g_ph_calibration_in_progress) = false;'
+            - component.update: ph_last_result_sensor
+            - script.stop: _ph_calibration
+
+      # Etape 4 : V_pH7 valide. Mise a jour diag + notif "rincer + plonger pH 4".
+      - component.update: v_ph7_sensor
+      - if:
+          condition:
+            api.connected:
+          then:
+            - homeassistant.action:
+                action: persistent_notification.create
+                data:
+                  title: FrangiPool - Calibration pH
+                data_template:
+                  message: !lambda |-
+                    char buf[96];
+                    snprintf(buf, sizeof(buf), "V_pH7=%.4fV capturé. Rincer la sonde et plonger dans le tampon pH 4.00 (~190s).", id(g_v_ph7));
+                    return std::string(buf);
+
+      # Etape 5 : delai de stabilisation pH 4
+      - delay: 180s
+
+      # Etape 6 : multi-capture pH 4 (3 echantillons espaces de 5s)
+      - lambda: |-
+          if (id(g_ph_abort)) return;
+          float v = id(ads1115_a1).state;
+          if (std::isnan(v)) {
+            id(g_ph_last_result_code) = 5;
+            id(g_ph_abort) = true;
+            return;
+          }
+          id(g_ph_cap_a) = v;
+      - delay: 5s
+      - lambda: |-
+          if (id(g_ph_abort)) return;
+          float v = id(ads1115_a1).state;
+          if (std::isnan(v)) {
+            id(g_ph_last_result_code) = 5;
+            id(g_ph_abort) = true;
+            return;
+          }
+          id(g_ph_cap_b) = v;
+      - delay: 5s
+      - lambda: |-
+          if (id(g_ph_abort)) return;
+          float v = id(ads1115_a1).state;
+          if (std::isnan(v)) {
+            id(g_ph_last_result_code) = 5;
+            id(g_ph_abort) = true;
+            return;
+          }
+          id(g_ph_cap_c) = v;
+      # Spread check pH 4 + ecriture g_v_ph4
+      - lambda: |-
+          if (id(g_ph_abort)) return;
+          float a = id(g_ph_cap_a), b = id(g_ph_cap_b), c = id(g_ph_cap_c);
+          float min_v = std::min({a, b, c});
+          float max_v = std::max({a, b, c});
+          if (max_v - min_v > 0.050f) {
+            id(g_ph_last_result_code) = 7;
+            id(g_ph_abort) = true;
+            return;
+          }
+          id(g_v_ph4) = (a + b + c) / 3.0f;
+
+      # Abort handler pH 4
+      - if:
+          condition: { lambda: 'return id(g_ph_abort);' }
+          then:
+            - if:
+                condition:
+                  api.connected:
+                then:
+                  - homeassistant.action:
+                      action: persistent_notification.create
+                      data:
+                        title: FrangiPool - Calibration pH échouée
+                      data_template:
+                        message: !lambda |-
+                          if (id(g_ph_last_result_code) == 5) {
+                            return std::string("Capteur indisponible (NaN) pendant la capture pH 4. Calibration abandonnée.");
+                          }
+                          char buf[96];
+                          float a = id(g_ph_cap_a), b = id(g_ph_cap_b), c = id(g_ph_cap_c);
+                          float spread_mv = (std::max({a, b, c}) - std::min({a, b, c})) * 1000.0f;
+                          snprintf(buf, sizeof(buf), "Capture pH 4 instable (spread=%.0fmV > 50mV). Calibration abandonnée.", spread_mv);
+                          return std::string(buf);
+            - lambda: 'id(g_ph_calibration_in_progress) = false;'
+            - component.update: ph_last_result_sensor
+            - component.update: v_ph4_sensor
+            - script.stop: _ph_calibration
+
+      - component.update: v_ph4_sensor
+
+      # Etape 7 : garde-fous R4 (V_pH7 > V_pH4) et R5 (slope dans [2.5, 5.0]).
+      # Calcul des candidats sur variables locales, pas d'ecriture
+      # tant qu'ils ne sont pas valides.
+      - lambda: |-
+          float v7 = id(g_v_ph7);
+          float v4 = id(g_v_ph4);
+          if (v7 <= v4) {
+            id(g_ph_last_result_code) = 2;
+            id(g_ph_abort) = true;
+            return;
+          }
+          float slope_candidate = 3.0f / (v7 - v4);
+          float intercept_candidate = 7.0f - slope_candidate * v7;
+          if (slope_candidate < 2.5f || slope_candidate > 5.0f) {
+            id(g_ph_last_result_code) = 3;
+            id(g_ph_abort) = true;
+            return;
+          }
+          // Acceptation : ecriture atomique slope/intercept.
+          id(g_ph_slope) = slope_candidate;
+          id(g_ph_intercept) = intercept_candidate;
+          id(g_ph_last_result_code) = 1;
+
+      # Abort handler garde-fous (cas R4 ou R5)
+      - if:
+          condition: { lambda: 'return id(g_ph_abort);' }
+          then:
+            - if:
+                condition:
+                  api.connected:
+                then:
+                  - homeassistant.action:
+                      action: persistent_notification.create
+                      data:
+                        title: FrangiPool - Calibration pH rejetée
+                      data_template:
+                        message: !lambda |-
+                          if (id(g_ph_last_result_code) == 2) {
+                            char buf[96];
+                            snprintf(buf, sizeof(buf), "V_pH7=%.4fV <= V_pH4=%.4fV — bains inversés ?", id(g_v_ph7), id(g_v_ph4));
+                            return std::string(buf);
+                          }
+                          char buf[96];
+                          float rejected_slope = 3.0f / (id(g_v_ph7) - id(g_v_ph4));
+                          snprintf(buf, sizeof(buf), "Pente=%.2f hors plage [2.5, 5.0]. Sonde HS ou bain contaminé.", rejected_slope);
+                          return std::string(buf);
+            - lambda: 'id(g_ph_calibration_in_progress) = false;'
+            - component.update: ph_last_result_sensor
+            - script.stop: _ph_calibration
+
+      # Etape 8 : succes. Cleanup + mise a jour de toutes les diag + notif OK.
+      - lambda: 'id(g_ph_calibration_in_progress) = false;'
+      - component.update: ph_slope_sensor
+      - component.update: ph_intercept_sensor
+      - component.update: ph_last_result_sensor
+      - component.update: realtime_ph
+      - if:
+          condition:
+            api.connected:
+          then:
+            - homeassistant.action:
+                action: persistent_notification.create
+                data:
+                  title: FrangiPool - Calibration pH OK
+                data_template:
+                  message: !lambda |-
+                    char buf[120];
+                    snprintf(buf, sizeof(buf),
+                             "Calibration pH réussie. Pente=%.3f, intercept=%.3f (V_pH7=%.4fV, V_pH4=%.4fV).",
+                             id(g_ph_slope), id(g_ph_intercept), id(g_v_ph7), id(g_v_ph4));
+                    return std::string(buf);
+
+button:
+  - platform: template
+    name: Démarrer calibration pH
+    entity_category: config
+    on_press:
+      then:
+        - script.execute: _ph_calibration
+
+  - platform: template
+    name: Reset calibration pH usine
+    entity_category: config
+    on_press:
+      then:
+        - if:
+            # Garde R13 : refuser le reset si une calibration est en cours.
+            condition: { lambda: 'return id(g_ph_calibration_in_progress);' }
+            then:
+              - if:
+                  condition:
+                    api.connected:
+                  then:
+                    - homeassistant.action:
+                        action: persistent_notification.create
+                        data:
+                          title: FrangiPool - Reset pH ignoré
+                        data_template:
+                          message: 'Une calibration pH est en cours. Le reset usine est ignoré pour ne pas écraser le résultat. Réessayer après la fin de la séquence (~6 min).'
+            else:
+              - lambda: |-
+                  id(g_ph_slope) = 3.56f;
+                  id(g_ph_intercept) = -1.889f;
+                  id(g_ph_last_result_code) = 8;
+              - component.update: ph_slope_sensor
+              - component.update: ph_intercept_sensor
+              - component.update: ph_last_result_sensor
+              - component.update: realtime_ph
+              - if:
+                  condition:
+                    api.connected:
+                  then:
+                    - homeassistant.action:
+                        action: persistent_notification.create
+                        data:
+                          title: FrangiPool - Calibration pH
+                        data_template:
+                          message: 'Calibration pH ramenée aux valeurs d''usine (slope=3.56, intercept=-1.889).'
 
 interval:
   - interval: 1min

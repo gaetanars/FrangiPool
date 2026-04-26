@@ -221,7 +221,7 @@ Notes :
 
 ## Implementation Units
 
-- [ ] U1. **Réécriture du calcul pH + globals + sondes diagnostic**
+- [x] U1. **Réécriture du calcul pH + globals + sondes diagnostic**
 
 **Goal:** Remplacer le modèle single-offset par le modèle slope+intercept avec valeurs d'usine. Mettre en place tous les globals et entités diagnostic dont U2 a besoin (flag anti-race, last_result). Aucun changement de comportement utilisateur visible tant que la calibration n'est pas relancée.
 
