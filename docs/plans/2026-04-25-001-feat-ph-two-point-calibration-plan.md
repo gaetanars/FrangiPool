@@ -273,7 +273,7 @@ Notes :
 
 ---
 
-- [ ] U2. **Script de calibration two-points + bouton démarrage + bouton reset usine**
+- [x] U2. **Script de calibration two-points + bouton démarrage + bouton reset usine**
 
 **Goal:** Ajouter la séquence interactive complète : un bouton qui orchestre pH7 → pH4 avec multi-capture spread check (R14), NaN guards (R12), garde-fous stricts (R4, R5), flag anti-race (R13), écriture de `g_ph_last_result` (R16) à chaque sortie, notifications HA à chaque étape, et un bouton de reset usine gardé par le flag (R13).
 
@@ -331,7 +331,7 @@ Notes :
 
 ---
 
-- [ ] U3. **Mise à jour README + dashboard**
+- [x] U3. **Mise à jour README + dashboard**
 
 **Goal:** Documenter le nouveau flux de calibration côté utilisateur (procédure, durée, recovery), nettoyer la doc / dashboard pour éviter les références orphelines, et expliciter les bonnes pratiques opérateur (pompe coupée).
 

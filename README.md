@@ -169,8 +169,56 @@ Disponibles selon le preset :
 | **Mode Surpresseur** | Off / Auto / Forcé |
 | **Calibration Redox 225mV / 475mV** | Calibration de la sonde Redox dans une solution étalon |
 | **Réinitialisation calibration Redox** | Remet l'offset de calibration à 0 |
-| **Calibration pH 7.00** | Calibration de la sonde pH dans un tampon pH 7.00 |
+| **Démarrer calibration pH** | Lance la séquence two-points pH 7 → pH 4 (~6 min 20 s, guidée par notifications HA, voir [Calibration pH](#calibration-ph-procédure)) |
+| **Reset calibration pH usine** | Restaure les valeurs d'usine (slope=3.56, intercept=-1.889). Refusé pendant qu'une calibration tourne |
 | **Redémarrage** | Redémarre l'ESP |
+
+## Calibration pH (procédure)
+
+Le module pH applique une calibration **two-points** : `pH = slope × V + intercept`, où `slope` et `intercept` sont recalculés à chaque calibration acceptée. La calibration single-point (ancien firmware) a été remplacée pour suivre le vieillissement de la sonde Gravity v2.0.
+
+### Matériel nécessaire
+
+- Tampon pH 7.00 (sachet prêt à diluer ou solution toute prête)
+- Tampon pH 4.00
+- Eau claire pour le rinçage entre les bains
+
+### Préparation
+
+- **Couper la pompe** avant de démarrer la calibration. Le firmware fige automatiquement `pool_ph` pendant la séquence (R15), mais c'est plus propre.
+- Sortir la sonde de la piscine et la rincer brièvement à l'eau claire.
+
+### Étapes
+
+1. Plonger la sonde dans le tampon **pH 7.00**. Attendre quelques secondes que la sonde soit bien immergée et stable.
+2. Dans Home Assistant, presser le bouton **Démarrer calibration pH**. Notification : *"Plonger la sonde dans le tampon pH 7.00 et attendre la stabilisation (~190s)"*.
+3. Attendre 190 s (180 s de stabilisation + 10 s de captures multi-échantillon). Le firmware capture 3 lectures espacées de 5 s et vérifie que le spread reste sous 50 mV (sinon rejet pour instabilité).
+4. Notification : *"V_pH7=X.XXXXV capturé. Rincer la sonde et plonger dans le tampon pH 4.00"*. Rincer la sonde à l'eau claire et la plonger dans le tampon **pH 4.00**.
+5. Attendre 190 s à nouveau.
+6. Notification finale : *"Calibration pH réussie. Pente=X.XXX, intercept=X.XXX"*.
+
+Durée totale : environ 6 min 20 s.
+
+### Cas de rejet
+
+Notification HA explicite + globals slope/intercept inchangés. Le code reste lisible *a posteriori* via le text_sensor `pH Calibration Last Result`.
+
+| Code | Cause | Vérifier |
+| :--- | :---- | :------- |
+| 2 | V_pH7 ≤ V_pH4 (bains inversés ou sonde câblée à l'envers) | Ordre des bains, câblage Gravity v2.0 |
+| 3 | Pente hors plage saine [2.5, 5.0] pH/V | Sonde usée, bain contaminé, court-circuit |
+| 4 / 5 | Capteur indisponible (NaN) pendant la capture | Câble sonde / connexion ADS1115 |
+| 6 / 7 | Capture instable (spread > 50 mV) | Sonde non stabilisée, bain trop froid, vibrations |
+
+### Recovery si HA déconnecte pendant la séquence
+
+Les notifications HA sont best-effort (perdues si HA est down au moment de l'envoi). En diagnostic, le `text_sensor` **pH Calibration Last Result** persiste l'issue de la dernière calibration : `OK pente=X.XXX, intercept=X.XXX`, `Rejet: …`, `Echec: …`, ou `Reset usine`. Lisible après reconnexion HA. Les sondes diagnostic numériques **pH Slope** (3.56 = défaut, autre = calibration appliquée), **pH Intercept**, **V_pH7** et **V_pH4** complètent le tableau.
+
+### Limitations et fréquence
+
+- **Pas de compensation en température** : on assume 25 °C. Erreur résiduelle ≤ 0.1 pH dans la plage piscine 15–30 °C, marginal pour une cible 7.0–7.6 ±0.1.
+- **Cible exclusivement Gravity pH Meter v2.0** non-inversé (pH 7 ≈ 2.5 V, pH 4 ≈ 1.65 V). Les v1.x ou clones inversés produisent des pentes hors [2.5, 5.0] et seront rejetés.
+- **Fréquence recommandée** : recalibrer en début de saison et après tout remplacement de la sonde.
 
 ## Dashboard Home Assistant
 
@@ -240,7 +288,7 @@ Pour les utilisateurs souhaitant composer une configuration personnalisée :
 | `packages/electrolyser.yaml` | Relais électrolyseur (GPIO27), compteur de minutes d'électrolyse |
 | `packages/booster.yaml` | Relais surpresseur (GPIO26), Mode Off/Auto/Forcé |
 | `packages/redox.yaml` | Capteur Redox/ORP (ADS1115 A0), boutons de calibration, capteur de tendance |
-| `packages/ph.yaml` | Capteur pH (ADS1115 A1), bouton de calibration |
+| `packages/ph.yaml` | Capteur pH (ADS1115 A1), calibration two-points pH 7+pH 4 (slope+intercept), 4 sondes diagnostic + text_sensor d'audit |
 | `packages/redox_electrolyser.yaml` | Auto-régulation Redox de l'électrolyseur, Mode Off/Auto/Forcé, seuils Redox |
 
 ## PCB
