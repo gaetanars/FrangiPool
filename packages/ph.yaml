@@ -1,10 +1,97 @@
+# packages/ph.yaml
+#
+# Capteur pH (Gravity pH Meter v2.0, DFRobot SEN0161-V2) sur ADS1115 A1.
+# Calibration two-points pH 7 + pH 4 -> recalcule slope ET intercept.
+# Formule appliquee : pH = g_ph_slope * V + g_ph_intercept
+# Valeurs d'usine (premier boot ou reset) : slope=3.56, intercept=-1.889
+# (parite avec la formule single-point pre-calibration).
+#
+# Writers de g_ph_slope / g_ph_intercept :
+#   1. _ph_calibration  (etape de validation finale, apres garde-fous R4 + R5)
+#   2. reset_calibration_ph_usine  (gardé par g_ph_calibration_in_progress)
+# Toute future addition d'un writer doit mettre cette liste a jour.
+#
+# Writers de g_ph_calibration_in_progress (R13) :
+#   - Set true   : _ph_calibration init (script entry)
+#   - Set false  : 4 chemins de sortie (verifies par grep "g_ph_calibration_in_progress) = false")
+#       (a) abort handler pH 7 (NaN ou spread)
+#       (b) abort handler pH 4 (NaN ou spread)
+#       (c) abort handler garde-fous (R4 ou R5)
+#       (d) success path
+# Toute nouvelle voie de sortie doit liberer le flag, sinon le bouton reset
+# reste indefiniment bloque jusqu'au reboot.
+#
+# Garde-fous (cf. docs/plans/2026-04-25-001-feat-ph-two-point-calibration-plan.md) :
+#   R4  - V_pH7 > V_pH4 sinon bains intervertis -> rejet
+#   R5  - slope dans [2.5, 5.0] pH/V sinon sonde HS / bain contamine -> rejet
+#   R12 - std::isnan guard sur chaque capture (cf. antifreeze-nan-silent-failure.md)
+#   R13 - verrou g_ph_calibration_in_progress contre la race reset-vs-calibration
+#   R14 - multi-capture 3 echantillons espaces 12s, spread max 50 mV
+#         (12s > update_interval ADS1115 10s -> 3 echantillons distincts garantis)
+#   R15 - gating de l'interval pool_ph pendant la calibration
+#         (etendu par g_ph_post_cal_cooldown pour 3 ticks apres la fin,
+#          le temps que la fenetre glissante de realtime_ph se vide)
+#   R16 - text_sensor pH Calibration Last Result, alimente par g_ph_last_result_code
+#         (codes : 0=jamais calibre, 1=OK, 2=rejet bains, 3=rejet pente,
+#          4=NaN pH7, 5=NaN pH4, 6=spread pH7, 7=spread pH4, 8=reset usine)
+
 globals:
   - id: g_store_pool_ph
     type: float
     restore_value: True
-  - id: g_ph_offset
+  - id: g_ph_slope
     type: float
     restore_value: True
+    initial_value: '3.56'
+  - id: g_ph_intercept
+    type: float
+    restore_value: True
+    initial_value: '-1.889'
+  - id: g_v_ph7
+    type: float
+    restore_value: True
+    initial_value: '0.0'
+  - id: g_v_ph4
+    type: float
+    restore_value: True
+    initial_value: '0.0'
+  - id: g_ph_calibration_in_progress
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+  - id: g_ph_last_result_code
+    type: int
+    restore_value: True
+    initial_value: '0'
+  # Scratch globals utilises uniquement par _ph_calibration (non restored).
+  - id: g_ph_abort
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+  - id: g_ph_cap_a
+    type: float
+    restore_value: no
+    initial_value: '0.0'
+  - id: g_ph_cap_b
+    type: float
+    restore_value: no
+    initial_value: '0.0'
+  - id: g_ph_cap_c
+    type: float
+    restore_value: no
+    initial_value: '0.0'
+  # Cooldown post-calibration (3 ticks de 1 min) qui prolonge le gating de
+  # l'interval pool_ph apres la fin de _ph_calibration. Le filtre
+  # sliding_window_moving_average (180s) sur realtime_ph reste sature de
+  # bains tampons pendant 3 min apres la fin de la sequence ; sans ce
+  # cooldown, le tick interval qui suit immediatement la calibration
+  # latcherait un melange bain/pool dans pool_ph. Decremente a chaque
+  # interval tick, set a 3 sur chaque chemin de sortie du script
+  # (success + 3 abort handlers).
+  - id: g_ph_post_cal_cooldown
+    type: int
+    restore_value: no
+    initial_value: '0'
 
 sensor:
   - platform: ads1115
@@ -22,7 +109,7 @@ sensor:
     id: realtime_ph
     accuracy_decimals: 1
     update_interval: 10s
-    lambda: return 3.56 * id(ads1115_a1).state - 1.889 + id(g_ph_offset);
+    lambda: return id(g_ph_slope) * id(ads1115_a1).state + id(g_ph_intercept);
     filters:
       - sliding_window_moving_average:
           window_size: 18
@@ -38,36 +125,455 @@ sensor:
     lambda: return id(g_store_pool_ph);
 
   - platform: template
-    name: pH Offset
+    name: pH Slope
     entity_category: diagnostic
-    id: ph_offset_sensor
-    lambda: return id(g_ph_offset);
+    id: ph_slope_sensor
+    accuracy_decimals: 3
+    lambda: return id(g_ph_slope);
+
+  - platform: template
+    name: pH Intercept
+    entity_category: diagnostic
+    id: ph_intercept_sensor
+    accuracy_decimals: 3
+    lambda: return id(g_ph_intercept);
+
+  - platform: template
+    name: V_pH7
+    entity_category: diagnostic
+    id: v_ph7_sensor
+    accuracy_decimals: 4
+    unit_of_measurement: "V"
+    lambda: return id(g_v_ph7);
+
+  - platform: template
+    name: V_pH4
+    entity_category: diagnostic
+    id: v_ph4_sensor
+    accuracy_decimals: 4
+    unit_of_measurement: "V"
+    lambda: return id(g_v_ph4);
+
+text_sensor:
+  - platform: template
+    name: pH Calibration Last Result
+    entity_category: diagnostic
+    id: ph_last_result_sensor
+    lambda: |-
+      // R-6 : table autoritative des codes de resultat. SI tu ajoutes un
+      // code dans _ph_calibration ou reset_calibration_ph_usine, ajoute
+      // un case ici. Le default est le filet de securite "code inconnu".
+      //   0 -> "Jamais calibré"               (premier boot)
+      //   1 -> "OK pente=X.XXX, intercept=Y.YYY"   (succes, recalcul dynamique)
+      //   2 -> "Rejet: V_pH7<=V_pH4..."       (R4 garde-fou, bains inverses)
+      //   3 -> "Rejet: pente=X.XX hors plage" (R5 garde-fou, dynamique)
+      //   4 -> "Echec: capteur indispo (pH 7)" (R12 NaN sur capture pH 7)
+      //   5 -> "Echec: capteur indispo (pH 4)" (R12 NaN sur capture pH 4)
+      //   6 -> "Echec: capture pH 7 instable"  (R14 spread > 50 mV pH 7)
+      //   7 -> "Echec: capture pH 4 instable"  (R14 spread > 50 mV pH 4)
+      //   8 -> "Reset usine"                   (bouton reset)
+      char buf[80];
+      switch (id(g_ph_last_result_code)) {
+        case 1:
+          snprintf(buf, sizeof(buf), "OK pente=%.3f, intercept=%.3f",
+                   id(g_ph_slope), id(g_ph_intercept));
+          return {std::string(buf)};
+        case 2:
+          return {std::string("Rejet: V_pH7<=V_pH4 (bains inversés ?)")};
+        case 3: {
+          // R-4 : guard zero-denominator. Au runtime normal, code=3 est
+          // reachable apres la garde R4 (v7 > v4) donc denom != 0. Mais
+          // sous partial NVS restore, code=3 peut etre restaure avec
+          // v7=v4=0 ; on retourne pente=0 plutot que +inf.
+          float denom = id(g_v_ph7) - id(g_v_ph4);
+          float rejected_slope = (denom != 0.0f) ? 3.0f / denom : 0.0f;
+          snprintf(buf, sizeof(buf), "Rejet: pente=%.2f hors plage [2.5, 5.0]",
+                   rejected_slope);
+          return {std::string(buf)};
+        }
+        case 4:
+          return {std::string("Echec: capteur indispo (pH 7)")};
+        case 5:
+          return {std::string("Echec: capteur indispo (pH 4)")};
+        case 6:
+          return {std::string("Echec: capture pH 7 instable")};
+        case 7:
+          return {std::string("Echec: capture pH 4 instable")};
+        case 8:
+          return {std::string("Reset usine")};
+        default:
+          // Code inconnu (n > 8 ou negatif) — fallback informatif.
+          return {std::string("Jamais calibré")};
+      }
+
+script:
+  # Sequence atomique pH 7 -> pH 4 avec multi-capture, NaN guards, et
+  # garde-fous stricts sur la pente. Verrou g_ph_calibration_in_progress
+  # active sur tous les chemins de sortie. mode: single ignore les
+  # re-presses pendant l'execution.
+  - id: _ph_calibration
+    mode: single
+    then:
+      # Init : verrouille le bouton reset et reset le flag d'abort.
+      - lambda: |-
+          id(g_ph_calibration_in_progress) = true;
+          id(g_ph_abort) = false;
+
+      # Etape 1 : notif "plonger dans pH 7"
+      - if:
+          condition:
+            api.connected:
+          then:
+            - homeassistant.action:
+                action: persistent_notification.create
+                data:
+                  title: FrangiPool - Calibration pH
+                data_template:
+                  message: 'Plonger la sonde dans le tampon pH 7.00 et attendre la stabilisation (~190s).'
+
+      # Etape 2 : delai de stabilisation pH 7
+      - delay: 180s
+
+      # Etape 3 : multi-capture pH 7 (3 echantillons espaces de 5s)
+      - lambda: |-
+          if (id(g_ph_abort)) return;
+          float v = id(ads1115_a1).state;
+          if (std::isnan(v)) {
+            id(g_ph_last_result_code) = 4;
+            id(g_ph_abort) = true;
+            return;
+          }
+          id(g_ph_cap_a) = v;
+      - delay: 12s
+      - lambda: |-
+          if (id(g_ph_abort)) return;
+          float v = id(ads1115_a1).state;
+          if (std::isnan(v)) {
+            id(g_ph_last_result_code) = 4;
+            id(g_ph_abort) = true;
+            return;
+          }
+          id(g_ph_cap_b) = v;
+      - delay: 12s
+      - lambda: |-
+          if (id(g_ph_abort)) return;
+          float v = id(ads1115_a1).state;
+          if (std::isnan(v)) {
+            id(g_ph_last_result_code) = 4;
+            id(g_ph_abort) = true;
+            return;
+          }
+          id(g_ph_cap_c) = v;
+      # Spread check pH 7 + ecriture g_v_ph7
+      - lambda: |-
+          if (id(g_ph_abort)) return;
+          float a = id(g_ph_cap_a), b = id(g_ph_cap_b), c = id(g_ph_cap_c);
+          float min_v = std::min({a, b, c});
+          float max_v = std::max({a, b, c});
+          if (max_v - min_v > 0.050f) {
+            id(g_ph_last_result_code) = 6;
+            id(g_ph_abort) = true;
+            return;
+          }
+          id(g_v_ph7) = (a + b + c) / 3.0f;
+
+      # Abort handler pH 7 : notif explicite + cleanup + stop.
+      - if:
+          condition: { lambda: 'return id(g_ph_abort);' }
+          then:
+            - if:
+                condition:
+                  api.connected:
+                then:
+                  - homeassistant.action:
+                      action: persistent_notification.create
+                      data:
+                        title: FrangiPool - Calibration pH échouée
+                      data_template:
+                        message: !lambda |-
+                          if (id(g_ph_last_result_code) == 4) {
+                            return std::string("Capteur indisponible (NaN) pendant la capture pH 7. Calibration abandonnée.");
+                          }
+                          char buf[96];
+                          float a = id(g_ph_cap_a), b = id(g_ph_cap_b), c = id(g_ph_cap_c);
+                          float spread_mv = (std::max({a, b, c}) - std::min({a, b, c})) * 1000.0f;
+                          snprintf(buf, sizeof(buf), "Capture pH 7 instable (spread=%.0fmV > 50mV). Calibration abandonnée.", spread_mv);
+                          return std::string(buf);
+            # R-1 fix : flag clear DEPLACE apres component.update pour eviter
+            # la race "reset entre flag-flip et update" qui ferait afficher
+            # le code 8 (Reset usine) a la place du code d'erreur reel.
+            # R-2 fix : set cooldown=3 (3 ticks de 1 min) pour gater l'interval
+            # post-calibration, le temps que la fenetre glissante de
+            # realtime_ph se vide des bains tampons.
+            - component.update: ph_last_result_sensor
+            - lambda: |-
+                id(g_ph_calibration_in_progress) = false;
+                id(g_ph_post_cal_cooldown) = 3;
+            - script.stop: _ph_calibration
+
+      # Etape 4 : V_pH7 valide. Mise a jour diag + notif "rincer + plonger pH 4".
+      - component.update: v_ph7_sensor
+      - if:
+          condition:
+            api.connected:
+          then:
+            - homeassistant.action:
+                action: persistent_notification.create
+                data:
+                  title: FrangiPool - Calibration pH
+                data_template:
+                  message: !lambda |-
+                    char buf[96];
+                    snprintf(buf, sizeof(buf), "V_pH7=%.4fV capturé. Rincer la sonde et plonger dans le tampon pH 4.00 (~190s).", id(g_v_ph7));
+                    return std::string(buf);
+
+      # Etape 5 : delai de stabilisation pH 4
+      - delay: 180s
+
+      # Etape 6 : multi-capture pH 4 (3 echantillons espaces de 5s)
+      - lambda: |-
+          if (id(g_ph_abort)) return;
+          float v = id(ads1115_a1).state;
+          if (std::isnan(v)) {
+            id(g_ph_last_result_code) = 5;
+            id(g_ph_abort) = true;
+            return;
+          }
+          id(g_ph_cap_a) = v;
+      - delay: 12s
+      - lambda: |-
+          if (id(g_ph_abort)) return;
+          float v = id(ads1115_a1).state;
+          if (std::isnan(v)) {
+            id(g_ph_last_result_code) = 5;
+            id(g_ph_abort) = true;
+            return;
+          }
+          id(g_ph_cap_b) = v;
+      - delay: 12s
+      - lambda: |-
+          if (id(g_ph_abort)) return;
+          float v = id(ads1115_a1).state;
+          if (std::isnan(v)) {
+            id(g_ph_last_result_code) = 5;
+            id(g_ph_abort) = true;
+            return;
+          }
+          id(g_ph_cap_c) = v;
+      # Spread check pH 4 + ecriture g_v_ph4
+      - lambda: |-
+          if (id(g_ph_abort)) return;
+          float a = id(g_ph_cap_a), b = id(g_ph_cap_b), c = id(g_ph_cap_c);
+          float min_v = std::min({a, b, c});
+          float max_v = std::max({a, b, c});
+          if (max_v - min_v > 0.050f) {
+            id(g_ph_last_result_code) = 7;
+            id(g_ph_abort) = true;
+            return;
+          }
+          id(g_v_ph4) = (a + b + c) / 3.0f;
+
+      # Abort handler pH 4
+      - if:
+          condition: { lambda: 'return id(g_ph_abort);' }
+          then:
+            - if:
+                condition:
+                  api.connected:
+                then:
+                  - homeassistant.action:
+                      action: persistent_notification.create
+                      data:
+                        title: FrangiPool - Calibration pH échouée
+                      data_template:
+                        message: !lambda |-
+                          if (id(g_ph_last_result_code) == 5) {
+                            return std::string("Capteur indisponible (NaN) pendant la capture pH 4. Calibration abandonnée.");
+                          }
+                          char buf[96];
+                          float a = id(g_ph_cap_a), b = id(g_ph_cap_b), c = id(g_ph_cap_c);
+                          float spread_mv = (std::max({a, b, c}) - std::min({a, b, c})) * 1000.0f;
+                          snprintf(buf, sizeof(buf), "Capture pH 4 instable (spread=%.0fmV > 50mV). Calibration abandonnée.", spread_mv);
+                          return std::string(buf);
+            # R-1 fix : flag clear DEPLACE apres tous les component.update.
+            # R-2 fix : cooldown=3 set en meme temps que le flag clear.
+            - component.update: ph_last_result_sensor
+            - component.update: v_ph4_sensor
+            - lambda: |-
+                id(g_ph_calibration_in_progress) = false;
+                id(g_ph_post_cal_cooldown) = 3;
+            - script.stop: _ph_calibration
+
+      - component.update: v_ph4_sensor
+
+      # Etape 7 : garde-fous R4 (V_pH7 > V_pH4) et R5 (slope dans [2.5, 5.0]).
+      # Calcul des candidats sur variables locales, pas d'ecriture
+      # tant qu'ils ne sont pas valides.
+      # R-5 fix : constantes nommees pour les valeurs de buffer (PH_BUF_HIGH,
+      # PH_BUF_LOW) et les bornes de pente (SLOPE_MIN, SLOPE_MAX) au lieu
+      # de litteraux nus, pour eviter le drift si on change de buffers.
+      # PH_RANGE = 3.0 (= 7.0 - 4.0) est le numerateur de la regression.
+      # SLOPE_MIN/MAX = [2.5, 5.0] : Gravity v2.0 nominale ~3.56 pH/V,
+      # accepte +-40 % pour des sondes vieillies.
+      - lambda: |-
+          const float PH_BUF_HIGH = 7.0f;
+          const float PH_BUF_LOW  = 4.0f;
+          const float PH_RANGE    = PH_BUF_HIGH - PH_BUF_LOW;
+          const float SLOPE_MIN   = 2.5f;
+          const float SLOPE_MAX   = 5.0f;
+
+          float v7 = id(g_v_ph7);
+          float v4 = id(g_v_ph4);
+          if (v7 <= v4) {
+            id(g_ph_last_result_code) = 2;
+            id(g_ph_abort) = true;
+            return;
+          }
+          float slope_candidate = PH_RANGE / (v7 - v4);
+          float intercept_candidate = PH_BUF_HIGH - slope_candidate * v7;
+          if (slope_candidate < SLOPE_MIN || slope_candidate > SLOPE_MAX) {
+            id(g_ph_last_result_code) = 3;
+            id(g_ph_abort) = true;
+            return;
+          }
+          // Acceptation : ecriture atomique slope/intercept.
+          id(g_ph_slope) = slope_candidate;
+          id(g_ph_intercept) = intercept_candidate;
+          id(g_ph_last_result_code) = 1;
+
+      # Abort handler garde-fous (cas R4 ou R5)
+      - if:
+          condition: { lambda: 'return id(g_ph_abort);' }
+          then:
+            - if:
+                condition:
+                  api.connected:
+                then:
+                  - homeassistant.action:
+                      action: persistent_notification.create
+                      data:
+                        title: FrangiPool - Calibration pH rejetée
+                      data_template:
+                        message: !lambda |-
+                          if (id(g_ph_last_result_code) == 2) {
+                            char buf[96];
+                            snprintf(buf, sizeof(buf), "V_pH7=%.4fV <= V_pH4=%.4fV — bains inversés ?", id(g_v_ph7), id(g_v_ph4));
+                            return std::string(buf);
+                          }
+                          char buf[96];
+                          // R-4 fix : guard zero-denominator (cas hypothetique
+                          // de partial NVS restore qui ferait v7==v4 alors
+                          // que code=3 est restaure).
+                          float denom = id(g_v_ph7) - id(g_v_ph4);
+                          float rejected_slope = (denom != 0.0f) ? 3.0f / denom : 0.0f;
+                          snprintf(buf, sizeof(buf), "Pente=%.2f hors plage [2.5, 5.0]. Sonde HS ou bain contaminé.", rejected_slope);
+                          return std::string(buf);
+            # R-1 fix : flag clear DEPLACE apres component.update.
+            # R-2 fix : cooldown=3 set en meme temps que le flag clear.
+            - component.update: ph_last_result_sensor
+            - lambda: |-
+                id(g_ph_calibration_in_progress) = false;
+                id(g_ph_post_cal_cooldown) = 3;
+            - script.stop: _ph_calibration
+
+      # Etape 8 : succes. Cleanup + mise a jour de toutes les diag + notif OK.
+      # R-1 fix : flag clear DEPLACE en derniere action pour eviter la race
+      # "reset entre flag-flip et success notif" qui pouvait publier un mix
+      # de "Reset usine" (text_sensor) + "OK pente=3.560 intercept=-1.889"
+      # (notif success embarque les valeurs courantes).
+      # R-2 fix : cooldown=3 set en meme temps que le flag clear pour
+      # gater l'interval pool_ph le temps que la fenetre glissante de
+      # realtime_ph (180s) se vide des bains tampons.
+      - component.update: ph_slope_sensor
+      - component.update: ph_intercept_sensor
+      - component.update: ph_last_result_sensor
+      - component.update: realtime_ph
+      - if:
+          condition:
+            api.connected:
+          then:
+            - homeassistant.action:
+                action: persistent_notification.create
+                data:
+                  title: FrangiPool - Calibration pH OK
+                data_template:
+                  message: !lambda |-
+                    char buf[120];
+                    snprintf(buf, sizeof(buf),
+                             "Calibration pH réussie. Pente=%.3f, intercept=%.3f (V_pH7=%.4fV, V_pH4=%.4fV).",
+                             id(g_ph_slope), id(g_ph_intercept), id(g_v_ph7), id(g_v_ph4));
+                    return std::string(buf);
+      # R-1 + R-2 : flag clear et cooldown=3 en derniere action du chemin succes.
+      - lambda: |-
+          id(g_ph_calibration_in_progress) = false;
+          id(g_ph_post_cal_cooldown) = 3;
 
 button:
   - platform: template
-    name: pH Calibration 7.00
+    name: Démarrer calibration pH
     entity_category: config
     on_press:
       then:
-        - globals.set:
-            id: g_ph_offset
-            value: !lambda "return 7.0 - 3.56 * id(ads1115_a1).state + 1.889;"
-        - component.update: ph_offset_sensor
-        - component.update: realtime_ph
+        - script.execute: _ph_calibration
+
+  - platform: template
+    name: Reset calibration pH usine
+    entity_category: config
+    on_press:
+      then:
+        - if:
+            # Garde R13 : refuser le reset si une calibration est en cours.
+            condition: { lambda: 'return id(g_ph_calibration_in_progress);' }
+            then:
+              - if:
+                  condition:
+                    api.connected:
+                  then:
+                    - homeassistant.action:
+                        action: persistent_notification.create
+                        data:
+                          title: FrangiPool - Reset pH ignoré
+                        data_template:
+                          message: 'Une calibration pH est en cours. Le reset usine est ignoré pour ne pas écraser le résultat. Réessayer après la fin de la séquence (~6 min).'
+            else:
+              - lambda: |-
+                  id(g_ph_slope) = 3.56f;
+                  id(g_ph_intercept) = -1.889f;
+                  id(g_ph_last_result_code) = 8;
+              - component.update: ph_slope_sensor
+              - component.update: ph_intercept_sensor
+              - component.update: ph_last_result_sensor
+              - component.update: realtime_ph
+              - if:
+                  condition:
+                    api.connected:
+                  then:
+                    - homeassistant.action:
+                        action: persistent_notification.create
+                        data:
+                          title: FrangiPool - Calibration pH
+                        data_template:
+                          message: 'Calibration pH ramenée aux valeurs d''usine (slope=3.56, intercept=-1.889).'
 
 interval:
   - interval: 1min
     then:
+      # R-2 : decrement du cooldown post-calibration en debut de tick. Set
+      # a 3 par chaque chemin de sortie de _ph_calibration (3 abort + 1
+      # succes), il prolonge le gating du latch pendant 3 minute-ticks
+      # apres la fin de la calibration — duree necessaire pour que la
+      # fenetre glissante de realtime_ph (180s) se vide des bains tampons.
+      - lambda: |-
+          if (id(g_ph_post_cal_cooldown) > 0) {
+            id(g_ph_post_cal_cooldown)--;
+          }
       - if:
           condition:
             and:
               - switch.is_on: pump
-              - lambda: |-
-                  if (id(pump_uptime).state >= id(pump_uptime_delay).state){
-                    return true;
-                  } else {
-                    return false;
-                  }
+              - lambda: "return id(pump_uptime).state >= id(pump_uptime_delay).state;"
+              - lambda: "return !id(g_ph_calibration_in_progress);"
+              - lambda: "return id(g_ph_post_cal_cooldown) <= 0;"
           then:
             - globals.set:
                 id: g_store_pool_ph
