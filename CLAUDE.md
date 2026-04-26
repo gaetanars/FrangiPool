@@ -132,6 +132,6 @@ Default to **dropping dashboard references** rather than re-adding firmware enti
 ## Where to find more context
 
 - [README.md](README.md) — user-facing documentation (preset matrix, substitutions, secrets workflow, full filtration spec, HA migration v1.x → v2.0).
-- [docs/solutions/architecture/](docs/solutions/architecture/) — post-mortem learnings you should re-read before touching the antifreeze lambda, the ORP regulator, or any multi-trigger script.
+- [docs/solutions/](docs/solutions/) — documented solutions to past problems (post-mortems, design patterns, workflow learnings) organized by category (`architecture/`, `design-patterns/`, …) with YAML frontmatter (`module`, `tags`, `problem_type`). Re-read before touching the antifreeze lambda, the ORP regulator, multi-trigger scripts, or making decisions in any documented area.
 - [docs/plans/](docs/plans/) and [docs/brainstorms/](docs/brainstorms/) — requirements docs and implementation plans for recent or in-flight changes.
 - [todos/](todos/) — gitignored local work queue; read-only reference when working on a matching topic.
