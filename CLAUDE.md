@@ -69,7 +69,7 @@ All logic lives in the eight package files. When adding hardware variants, creat
 | [packages/filtration.yaml](packages/filtration.yaml) | Authoritative pump scheduler: `_calcul_filtration` script + `interval: 30s` loop, mode select (Off/Hiver/Courbe/Auto), force-duration buttons, `force_filtration` / `recalc_filtration` HA API actions. |
 | [packages/i2c_ads1115.yaml](packages/i2c_ads1115.yaml) | I²C on GPIO21/22 + ADS1115 @ `0x48`. Required by `redox` and `ph`. |
 | [packages/electrolyser.yaml](packages/electrolyser.yaml) | GPIO27 relay (NOT inverted — `RESTORE_DEFAULT_ON` intentionally). Pure actuator; policy lives in `redox_electrolyser.yaml`. |
-| [packages/redox.yaml](packages/redox.yaml) | ORP sensor on ADS1115 A0, calibration buttons (225 mV / 475 mV / reset), 5-min trend `g_redox_trend_state`. |
+| [packages/redox.yaml](packages/redox.yaml) | ORP sensor on ADS1115 A0, calibration buttons (225 mV / 475 mV / reset). `pool_redox` is sampled once per minute from `realtime_redox` only when pump uptime ≥ `pump_uptime_delay`. |
 | [packages/ph.yaml](packages/ph.yaml) | pH sensor on ADS1115 A1, single-point calibration at 7.00. |
 | [packages/redox_electrolyser.yaml](packages/redox_electrolyser.yaml) | Auto-regulation policy for the electrolyser (see below). |
 | [packages/booster.yaml](packages/booster.yaml) | GPIO26 booster pump relay (active-LOW). |
@@ -88,14 +88,17 @@ All logic lives in the eight package files. When adding hardware variants, creat
 
 Any new code that writes to `pump` (e.g. a new forced button, an HA API action) must go through the scheduler's globals (`g_forced_remaining_s`, `filtration_mode`) instead of calling `id(pump).turn_on/off()` directly, or it will race with the 30 s tick.
 
-### Electrolyser regulation: asymmetric policy
+### Electrolyser regulation: hysteresis with pump-uptime gate
 
-`packages/redox_electrolyser.yaml` implements **fast OFF, slow ON** by design ([docs/solutions/architecture/redox-asymmetric-regulation-policy.md](docs/solutions/architecture/redox-asymmetric-regulation-policy.md)):
+`packages/redox_electrolyser.yaml` regulates the chlorine electrolyser with pure hysteresis on `pool_redox`. The historical "fast OFF / slow ON with 30-min stability gate" was removed because the pump-uptime sampling in `packages/redox.yaml` was already filtering transient noise, making the second-stage debouncer redundant and confusing. The genealogy of the original fix and the rationale for the simplification are in [docs/solutions/architecture/redox-asymmetric-regulation-policy.md](docs/solutions/architecture/redox-asymmetric-regulation-policy.md) (see the "Update 2026-04-26" section).
 
-- **OFF** is edge-triggered via `sensor.pool_redox.on_value_range.above` and by mode-transition handlers — reacts in seconds to over-chlorination risk.
-- **ON** is *only* reachable through the `interval: 1min` block, gated by `g_redox_stable_minutes >= 30` AND `g_redox_trend_state <= 0` AND `ORP < setpoint - 30 mV` AND pump running past `pump_uptime_delay`.
+Current model:
 
-When editing any `electrolyser.turn_on` / `electrolyser.turn_off` call, enumerate all five writer types before trusting the gate: `on_value_range`, `interval`, `select.on_value` (including Auto/else branches), `button.on_press`, and `api.actions`. The code review checklist in the linked doc is the authoritative version. Also: `select.on_value` Auto branches **must** reset `g_redox_stable_minutes = 0` so the gate starts measuring from mode-switch time, not from stale prior-mode minutes.
+- **`interval: 1min`** is the authoritative regulator. In Auto mode, after early-returning when pump is OFF or `pump_uptime < pump_uptime_delay`, it applies hysteresis: `pool_redox > setpoint → turn_off`, `pool_redox < setpoint - 30 → turn_on`, otherwise hold state.
+- **`sensor.pool_redox.on_value_range.above`** kept as a sub-second OFF safety net for over-chlorination — single-direction writer (OFF only), does not contradict the interval.
+- **`select.electrolyser_mode.on_value`** handles Off/Forcé immediately. The Auto branch only applies an immediate OFF if `pool_redox > setpoint`; otherwise it delegates to the next interval tick.
+
+When editing any `electrolyser.turn_on` / `electrolyser.turn_off` call, enumerate all five writer types: `on_value_range`, `interval`, `select.on_value` (including Auto/else branches), `button.on_press`, and `api.actions`. The review checklist in the linked doc remains authoritative on the writer-enumeration discipline — only the policy implemented changed (no more stability-counter gate to verify, just hysteresis + pump-uptime gate).
 
 ### Safety-critical lambda pattern (NaN guards)
 
