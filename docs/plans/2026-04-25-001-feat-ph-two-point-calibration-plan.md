@@ -1,7 +1,7 @@
 ---
 title: "feat: Calibration pH two-points (Gravity v2.0)"
 type: feat
-status: active
+status: completed
 date: 2026-04-25
 deepened: 2026-04-26
 origin: docs/brainstorms/2026-04-25-001-ph-two-point-calibration-requirements.md
