@@ -1,10 +1,55 @@
+# packages/ph.yaml
+#
+# Capteur pH (Gravity pH Meter v2.0, DFRobot SEN0161-V2) sur ADS1115 A1.
+# Calibration two-points pH 7 + pH 4 -> recalcule slope ET intercept.
+# Formule appliquee : pH = g_ph_slope * V + g_ph_intercept
+# Valeurs d'usine (premier boot ou reset) : slope=3.56, intercept=-1.889
+# (parite avec la formule single-point pre-calibration).
+#
+# Writers de g_ph_slope / g_ph_intercept :
+#   1. _ph_calibration  (etape de validation finale, apres garde-fous R4 + R5)
+#   2. reset_calibration_ph_usine  (gardé par g_ph_calibration_in_progress)
+# Toute future addition d'un writer doit mettre cette liste a jour.
+#
+# Garde-fous (cf. docs/plans/2026-04-25-001-feat-ph-two-point-calibration-plan.md) :
+#   R4  - V_pH7 > V_pH4 sinon bains intervertis -> rejet
+#   R5  - slope dans [2.5, 5.0] pH/V sinon sonde HS / bain contamine -> rejet
+#   R12 - std::isnan guard sur chaque capture (cf. antifreeze-nan-silent-failure.md)
+#   R13 - verrou g_ph_calibration_in_progress contre la race reset-vs-calibration
+#   R14 - multi-capture 3 echantillons espaces 5s, spread max 50 mV
+#   R15 - gating de l'interval pool_ph pendant la calibration
+#   R16 - text_sensor pH Calibration Last Result, alimente par g_ph_last_result_code
+#         (codes : 0=jamais calibre, 1=OK, 2=rejet bains, 3=rejet pente,
+#          4=NaN pH7, 5=NaN pH4, 6=spread pH7, 7=spread pH4, 8=reset usine)
+
 globals:
   - id: g_store_pool_ph
     type: float
     restore_value: True
-  - id: g_ph_offset
+  - id: g_ph_slope
     type: float
     restore_value: True
+    initial_value: '3.56'
+  - id: g_ph_intercept
+    type: float
+    restore_value: True
+    initial_value: '-1.889'
+  - id: g_v_ph7
+    type: float
+    restore_value: True
+    initial_value: '0.0'
+  - id: g_v_ph4
+    type: float
+    restore_value: True
+    initial_value: '0.0'
+  - id: g_ph_calibration_in_progress
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+  - id: g_ph_last_result_code
+    type: int
+    restore_value: True
+    initial_value: '0'
 
 sensor:
   - platform: ads1115
@@ -22,7 +67,7 @@ sensor:
     id: realtime_ph
     accuracy_decimals: 1
     update_interval: 10s
-    lambda: return 3.56 * id(ads1115_a1).state - 1.889 + id(g_ph_offset);
+    lambda: return id(g_ph_slope) * id(ads1115_a1).state + id(g_ph_intercept);
     filters:
       - sliding_window_moving_average:
           window_size: 18
@@ -38,22 +83,66 @@ sensor:
     lambda: return id(g_store_pool_ph);
 
   - platform: template
-    name: pH Offset
+    name: pH Slope
     entity_category: diagnostic
-    id: ph_offset_sensor
-    lambda: return id(g_ph_offset);
+    id: ph_slope_sensor
+    accuracy_decimals: 3
+    lambda: return id(g_ph_slope);
 
-button:
   - platform: template
-    name: pH Calibration 7.00
-    entity_category: config
-    on_press:
-      then:
-        - globals.set:
-            id: g_ph_offset
-            value: !lambda "return 7.0 - 3.56 * id(ads1115_a1).state + 1.889;"
-        - component.update: ph_offset_sensor
-        - component.update: realtime_ph
+    name: pH Intercept
+    entity_category: diagnostic
+    id: ph_intercept_sensor
+    accuracy_decimals: 3
+    lambda: return id(g_ph_intercept);
+
+  - platform: template
+    name: V_pH7
+    entity_category: diagnostic
+    id: v_ph7_sensor
+    accuracy_decimals: 4
+    unit_of_measurement: "V"
+    lambda: return id(g_v_ph7);
+
+  - platform: template
+    name: V_pH4
+    entity_category: diagnostic
+    id: v_ph4_sensor
+    accuracy_decimals: 4
+    unit_of_measurement: "V"
+    lambda: return id(g_v_ph4);
+
+text_sensor:
+  - platform: template
+    name: pH Calibration Last Result
+    entity_category: diagnostic
+    id: ph_last_result_sensor
+    lambda: |-
+      char buf[80];
+      switch (id(g_ph_last_result_code)) {
+        case 1:
+          snprintf(buf, sizeof(buf), "OK pente=%.3f, intercept=%.3f",
+                   id(g_ph_slope), id(g_ph_intercept));
+          return {std::string(buf)};
+        case 2:
+          return {std::string("Rejet: V_pH7<=V_pH4 (bains inversés ?)")};
+        case 3:
+          snprintf(buf, sizeof(buf), "Rejet: pente=%.2f hors plage [2.5, 5.0]",
+                   3.0f / (id(g_v_ph7) - id(g_v_ph4)));
+          return {std::string(buf)};
+        case 4:
+          return {std::string("Echec: capteur indispo (pH 7)")};
+        case 5:
+          return {std::string("Echec: capteur indispo (pH 4)")};
+        case 6:
+          return {std::string("Echec: capture pH 7 instable")};
+        case 7:
+          return {std::string("Echec: capture pH 4 instable")};
+        case 8:
+          return {std::string("Reset usine")};
+        default:
+          return {std::string("")};
+      }
 
 interval:
   - interval: 1min
@@ -62,12 +151,8 @@ interval:
           condition:
             and:
               - switch.is_on: pump
-              - lambda: |-
-                  if (id(pump_uptime).state >= id(pump_uptime_delay).state){
-                    return true;
-                  } else {
-                    return false;
-                  }
+              - lambda: "return id(pump_uptime).state >= id(pump_uptime_delay).state;"
+              - lambda: "return !id(g_ph_calibration_in_progress);"
           then:
             - globals.set:
                 id: g_store_pool_ph
