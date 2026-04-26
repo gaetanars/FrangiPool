@@ -41,7 +41,7 @@ Voir l'origine ([docs/brainstorms/2026-04-25-001-ph-two-point-calibration-requir
 - R13. **Verrou anti-race reset-vs-calibration** : un global `g_ph_calibration_in_progress` (non-restored) est `true` pendant l'exécution du script de calibration. Le bouton `Reset calibration pH usine` vérifie ce flag et notifie "Calibration en cours, reset ignoré" sans modifier slope/intercept si la calib tourne. *Source : adversarial F1.*
 - R14. **Capture multi-échantillon avec spread check** : à la fin de chaque fenêtre de stabilisation 180 s, on capture 3 échantillons espacés de 5 s (T+180, T+185, T+190). Si `max − min > 50 mV`, abort + notif "Capture instable". Sinon, V_pHx = moyenne des 3 échantillons. Couvre les staleness I²C qu'un guard NaN seul ne détecte pas. *Source : adversarial F3.*
 - R15. **Gating de l'échantillonnage `pool_ph` pendant la calibration** : le bloc `interval: 1min` qui latche `g_store_pool_ph` doit être conditionné sur `!id(g_ph_calibration_in_progress)`. Évite que des lectures de bains tampons fuient dans `pool_ph` quand la pompe tournait déjà depuis ≥ `pump_uptime_delay`. *Source : adversarial F4.*
-- R16. **Canal de recovery résilient à la déconnexion HA** : un `text_sensor "pH Calibration Last Result"` exposé en diagnostic, alimenté par un global `g_ph_last_result` (string, `restore_value: true`). Le script et le bouton reset y écrivent l'issue de chaque action (`"OK pente=3.529, intercept=-1.824"`, `"Rejet: pente hors plage"`, `"Reset usine"`, etc.) — survit aux déconnexions WiFi/HA, lisible après reconnexion. *Source : adversarial F2.*
+- R16. **Canal de recovery résilient à la déconnexion HA** : un `text_sensor "pH Calibration Last Result"` exposé en diagnostic, alimenté par un global `g_ph_last_result_code` (int, `restore_value: true`, codes 0-8). Le script et le bouton reset écrivent ce code à chaque issue ; le lambda du `text_sensor` mappe le code vers une chaîne française (succès = format dynamique avec slope/intercept, rejet = raison spécifique, etc.) — survit aux déconnexions WiFi/HA, lisible après reconnexion. *Source : adversarial F2.* **Note implémentation (2026-04-26)** : la version brainstorm/plan initiale spécifiait un global `g_ph_last_result` de type `std::string` ; l'implémentation a opté pour un global `g_ph_last_result_code` de type `int` + lookup lambda dans le `text_sensor`, parce que `restore_value: true` n'est pas fiable sur les `std::string` globals en ESPHome (le mécanisme de préférences travaille mal avec les types de taille variable). Comportement utilisateur identique. Codes : 0=jamais calibré, 1=OK, 2=rejet bains inversés, 3=rejet pente hors plage, 4=NaN pH 7, 5=NaN pH 4, 6=spread pH 7, 7=spread pH 4, 8=reset usine.
 
 **Origin flows:** F1 (Calibration two-point pH 7 → pH 4)
 **Origin acceptance examples:** AE1 (couvre R1, R2 — calcul nominal), AE2 (couvre R4 — bains inversés), AE3 (couvre R5 — sonde HS)
@@ -93,7 +93,7 @@ Voir l'origine ([docs/brainstorms/2026-04-25-001-ph-two-point-calibration-requir
 - **R15 — Gating de `pool_ph` pendant la calibration** : la claim antérieure que `pump_uptime_delay` protégeait suffisamment était fausse — si la pompe tournait déjà depuis > `pump_uptime_delay` quand l'opérateur démarre la calib, le gate n'arrête rien et `pool_ph` se polluerait avec des bains tampons. Le flag R13 résout ça atomiquement, sans coût supplémentaire.
 - **R16 — `text_sensor` Calibration Last Result avec `restore_value`** : les notifs HA via `api.connected` peuvent être silencieusement perdues sur déconnexion WiFi/HA pendant la calib (snapshot à l'envoi, pas garantie de delivery). Un text_sensor persistant est le canal résilient ; les 4 sondes diagnostic numériques restent le double-check chiffré.
 - **Garde-fous appliqués *avant* l'écriture des globals** (R4, R5) : la lambda calcule slope/intercept candidats dans des variables locales, vérifie les bornes, *puis* écrit les globals. Sur rejet, les anciennes valeurs sont préservées (pattern fail-soft "preserve last known state").
-- **V_pH7/V_pH4 conservés après reset usine** (R9) : le reset ne purge que slope/intercept (et écrit `g_ph_last_result = "Reset usine"`). Les V capturés restent visibles en diagnostic comme historique d'audit — utile pour comprendre *a posteriori* pourquoi une calibration avait été appliquée. Le bouton reset notifie clairement.
+- **V_pH7/V_pH4 conservés après reset usine** (R9) : le reset ne purge que slope/intercept (et écrit `g_ph_last_result_code = "Reset usine"`). Les V capturés restent visibles en diagnostic comme historique d'audit — utile pour comprendre *a posteriori* pourquoi une calibration avait été appliquée. Le bouton reset notifie clairement.
 
 ---
 
@@ -103,7 +103,7 @@ Voir l'origine ([docs/brainstorms/2026-04-25-001-ph-two-point-calibration-requir
 
 - **Quel mode de script ?** → `mode: single` (justifié par déduction sur la nature séquentielle à état partiel ; cf. Key Technical Decisions pour le raisonnement complet — le learning cité ne tranche pas directement `single` vs `restart`).
 - **Snapshot vs moyennage à la capture ?** → **Réévalué pendant la doc-review du 2026-04-26** : remplacé par le multi-capture R14 (3 échantillons espacés de 5 s avec spread check ≤ 50 mV). Couvre à la fois la robustesse au bruit (la motivation initiale) et la détection de staleness I²C (révélée par adversarial F3).
-- **Reset usine purge-t-il les V_pH7/V_pH4 capturés ?** → Non. Conservés en diagnostic comme audit ; reset ne touche que slope/intercept (et écrit `g_ph_last_result = "Reset usine"`, R16).
+- **Reset usine purge-t-il les V_pH7/V_pH4 capturés ?** → Non. Conservés en diagnostic comme audit ; reset ne touche que slope/intercept (et écrit `g_ph_last_result_code = "Reset usine"`, R16).
 - **Race reset-vs-calibration ?** → résolu via le flag `g_ph_calibration_in_progress` (R13) : pendant l'exécution du script, le bouton reset notifie "Calibration en cours, reset ignoré" et n'écrit pas. *Identifié par adversarial F1 le 2026-04-26.*
 - **Comment protéger `pool_ph` quand la pompe tourne déjà depuis > `pump_uptime_delay` au démarrage de la calib ?** → gating de l'`interval: 1min` sur `!id(g_ph_calibration_in_progress)` (R15), atomique et gratuit puisque le flag existe déjà via R13. *Identifié par adversarial F4 le 2026-04-26.*
 - **Comment recevoir l'issue de la calib si HA est déconnecté pendant la séquence ?** → `text_sensor` "pH Calibration Last Result" avec `restore_value` (R16) ; les 4 diagnostics numériques restent disponibles comme double-check. *Identifié par adversarial F2 le 2026-04-26.*
@@ -121,6 +121,8 @@ Voir l'origine ([docs/brainstorms/2026-04-25-001-ph-two-point-calibration-requir
 
 Squelette logique du script `_ph_calibration` (à écrire en YAML ESPHome) — intègre les durcissements R12 (NaN guard), R13 (flag anti-race), R14 (multi-capture spread), R16 (last_result).
 
+> **Note de lecture du pseudo-code** : pour la lisibilité, les écritures à `g_ph_last_result_code` sont annotées avec la chaîne française correspondante (`"Echec: capteur indispo (pH 7)"`) — l'implémentation réelle écrit le **code int** (`4` pour cet exemple) et le `text_sensor` mappe code → chaîne via lookup lambda. Voir R16 pour la table complète des codes.
+
 ```text
 script: _ph_calibration  (mode: single)
   on_enter:
@@ -135,7 +137,7 @@ script: _ph_calibration  (mode: single)
        for i in 0..2:
          v = id(ads1115_a1).state
          if isnan(v):
-           id(g_ph_last_result) = "Echec: capteur indispo (pH 7)"   // R16
+           id(g_ph_last_result_code) = "Echec: capteur indispo (pH 7)"   // R16
            id(g_ph_calibration_in_progress) = false                  // R13: libère le verrou
            notify "Calibration échouée: capteur indisponible (pH 7)"
            abort
@@ -143,7 +145,7 @@ script: _ph_calibration  (mode: single)
          if i < 2: delay 5s
        v_min = min(captures); v_max = max(captures)
        if (v_max - v_min) > 0.050:
-         id(g_ph_last_result) = "Echec: capture instable pH 7 (spread=<xx>mV)"
+         id(g_ph_last_result_code) = "Echec: capture instable pH 7 (spread=<xx>mV)"
          id(g_ph_calibration_in_progress) = false
          notify "Calibration échouée: capture pH 7 instable (spread=<xx>mV > 50mV)"
          abort
@@ -158,14 +160,14 @@ script: _ph_calibration  (mode: single)
        for i in 0..2:
          v = id(ads1115_a1).state
          if isnan(v):
-           id(g_ph_last_result) = "Echec: capteur indispo (pH 4)"
+           id(g_ph_last_result_code) = "Echec: capteur indispo (pH 4)"
            id(g_ph_calibration_in_progress) = false
            notify "Calibration échouée: capteur indisponible (pH 4)"
            abort
          captures.push(v)
          if i < 2: delay 5s
        if (max(captures) - min(captures)) > 0.050:
-         id(g_ph_last_result) = "Echec: capture instable pH 4 (spread=<xx>mV)"
+         id(g_ph_last_result_code) = "Echec: capture instable pH 4 (spread=<xx>mV)"
          id(g_ph_calibration_in_progress) = false
          notify "Calibration échouée: capture pH 4 instable (spread=<xx>mV > 50mV)"
          abort
@@ -174,14 +176,14 @@ script: _ph_calibration  (mode: single)
 
     7. // Garde-fous (sur variables locales, pas encore écrites dans slope/intercept)
        if v7 <= v4:
-         id(g_ph_last_result) = "Rejet: V_pH7<=V_pH4 (bains inversés ?)"
+         id(g_ph_last_result_code) = "Rejet: V_pH7<=V_pH4 (bains inversés ?)"
          id(g_ph_calibration_in_progress) = false
          notify "Calibration rejetée: V_pH7 <= V_pH4 — bains inversés ?"
          abort
        slope_candidate     = 3.0 / (v7 - v4)
        intercept_candidate = 7.0 - slope_candidate * v7
        if slope_candidate < 2.5 || slope_candidate > 5.0:
-         id(g_ph_last_result) = "Rejet: pente=<x.xx> hors plage [2.5,5.0]"
+         id(g_ph_last_result_code) = "Rejet: pente=<x.xx> hors plage [2.5,5.0]"
          id(g_ph_calibration_in_progress) = false
          notify "Calibration rejetée: pente=<x.xx> hors plage saine [2.5, 5.0]"
          abort
@@ -189,7 +191,7 @@ script: _ph_calibration  (mode: single)
     8. // Acceptation: écriture atomique des deux globals + last_result
        id(g_ph_slope)     = slope_candidate
        id(g_ph_intercept) = intercept_candidate
-       id(g_ph_last_result) = "OK pente=<x.xx>, intercept=<y.yyy>"
+       id(g_ph_last_result_code) = "OK pente=<x.xx>, intercept=<y.yyy>"
        id(g_ph_calibration_in_progress) = false                      // R13: libère
        component.update sur les 5 diagnostics  (slope, intercept, V_pH7, V_pH4, last_result)
        notify "Calibration pH OK — pente=<x.xx>, intercept=<y.yyy>"
@@ -204,14 +206,14 @@ button: reset_calibration_ph_usine
       return
     id(g_ph_slope)       = 3.56
     id(g_ph_intercept)   = -1.889
-    id(g_ph_last_result) = "Reset usine"                              // R16
+    id(g_ph_last_result_code) = "Reset usine"                              // R16
     component.update sur les 5 diagnostics
     notify "Calibration pH ramenée aux valeurs d'usine"
 ```
 
 Notes :
 
-- Toutes les notifications passent par `homeassistant.action: persistent_notification.create` enveloppé dans `if condition: api.connected:`. Le `g_ph_last_result` est le canal de recovery résilient à la déconnexion HA (R16).
+- Toutes les notifications passent par `homeassistant.action: persistent_notification.create` enveloppé dans `if condition: api.connected:`. Le `g_ph_last_result_code` est le canal de recovery résilient à la déconnexion HA (R16).
 - La formule du sensor `realtime_ph` devient `slope * V + intercept` (au lieu de `3.56 * V - 1.889 + offset`).
 - Le bloc `interval: 1min` qui latche `g_store_pool_ph` est conditionné sur `!id(g_ph_calibration_in_progress)` (R15) — pas d'update pendant que les bains tampons sont en lecture.
 - Un commentaire d'en-tête de fichier liste les writers de `g_ph_slope`/`g_ph_intercept` : (1) `_ph_calibration` étape 8, (2) `reset_calibration_ph_usine` (gardé par R13). Toute future addition d'un writer doit mettre ce commentaire à jour.
@@ -240,10 +242,10 @@ Notes :
   - `g_v_ph7` (float, `restore_value: true`, `initial_value: '0.0'`)
   - `g_v_ph4` (float, `restore_value: true`, `initial_value: '0.0'`)
   - `g_ph_calibration_in_progress` (bool, **`restore_value: false`** — flag éphémère, R13. Si l'ESP reboote en plein milieu d'une calib, le flag repart à false et le reset redevient utilisable)
-  - `g_ph_last_result` (string, `restore_value: true`, `initial_value: '""'` — vide au premier boot, R16)
+  - `g_ph_last_result_code` (int, `restore_value: true`, `initial_value: '0'` — `0` = jamais calibré au premier boot, R16. Voir R16 pour la table de codes 0-8 et le rationale int-au-lieu-de-string)
 - Réécrire le lambda du sensor `realtime_ph` : `return id(g_ph_slope) * id(ads1115_a1).state + id(g_ph_intercept);`. Conserver `accuracy_decimals: 1`, `update_interval: 10s`, et le filtre `sliding_window_moving_average` (window 18, send_every 6).
 - Ajouter 4 sondes template diagnostic numériques (R11) : `pH Slope` (lambda `return id(g_ph_slope);`), `pH Intercept` (lambda `return id(g_ph_intercept);`), `V_pH7` (lambda `return id(g_v_ph7);`, unit_of_measurement `V`), `V_pH4` (idem). Toutes en `entity_category: diagnostic`.
-- Ajouter 1 `text_sensor` diagnostic `pH Calibration Last Result` (R16) qui lit `g_ph_last_result`. `entity_category: diagnostic`. Pattern à suivre : [packages/redox.yaml:78-88](../../packages/redox.yaml) (`text_sensor: Tendance Redox`).
+- Ajouter 1 `text_sensor` diagnostic `pH Calibration Last Result` (R16) qui lit `g_ph_last_result_code`. `entity_category: diagnostic`. Pattern à suivre : [packages/redox.yaml:78-88](../../packages/redox.yaml) (`text_sensor: Tendance Redox`).
 - Conserver à l'identique le sensor `pool_ph` (lecture de `g_store_pool_ph`).
 - **Modifier le bloc `interval: 1min`** qui latche `g_store_pool_ph` : ajouter à la condition `and:` une 3ᵉ branche `- lambda: "return !id(g_ph_calibration_in_progress);"` (R15). Pendant une calibration, l'interval ne met PAS à jour `pool_ph`.
 - Ajouter un commentaire d'en-tête de fichier listant les writers de slope/intercept (préparation pour U2) et précisant le rationale single-point → two-points + bornes garde-fous (cf. learning [redox-asymmetric-regulation-policy.md](../solutions/architecture/redox-asymmetric-regulation-policy.md)).
@@ -260,7 +262,7 @@ Notes :
 - Happy path / Covers AE1. Avec slope=3.56, intercept=-1.889 (valeurs d'usine, premier boot ou post-reset), une mesure ADS1115 à V=2.50 V doit donner pH = 8.011. À V=2.10 V → pH = 5.587. À V=1.65 V → pH = 3.985. Calculs vérifiables manuellement à partir du lambda.
 - Edge case. Au boot avec valeurs persistées différentes (ex: slope=3.529, intercept=-1.824 — valeurs d'AE1), `realtime_ph(V=2.10)` doit donner 5.587 — confirme que `restore_value: true` charge bien les globals avant le premier calcul.
 - Edge case. Si l'ADS1115 retourne NaN (probe débranché), `realtime_ph` propagera NaN — c'est le comportement actuel et acceptable côté affichage (HA affichera "unknown"). Ce n'est PAS le chemin de calibration (qui lui doit guarder, cf. U2).
-- Edge case. Au premier boot après OTA depuis l'ancien firmware, `g_ph_calibration_in_progress` doit valoir `false` (`restore_value: false`, défaut bool) et `g_ph_last_result` doit valoir `""` (string vide). Le `text_sensor` "pH Calibration Last Result" affiche une valeur vide ou "—" selon le rendu HA.
+- Edge case. Au premier boot après OTA depuis l'ancien firmware, `g_ph_calibration_in_progress` doit valoir `false` (`restore_value: false`, défaut bool) et `g_ph_last_result_code` doit valoir `""` (string vide). Le `text_sensor` "pH Calibration Last Result" affiche une valeur vide ou "—" selon le rendu HA.
 - Integration / Covers R15. Forcer manuellement (via `lambda` de debug, ou via un bouton de test temporaire pendant développement) `g_ph_calibration_in_progress = true`, vérifier que pendant ~70 s le bloc `interval: 1min` ne met PAS à jour `g_store_pool_ph` même si `pump.is_on` et `pump_uptime ≥ pump_uptime_delay`. Remettre à `false`, vérifier que le tick suivant écrit normalement.
 - ESPHome config validation : `esphome config salt_full.yaml` (après `sed`-rewrite) passe sans erreur. Idem pour les 5 autres presets qui incluent `packages/ph.yaml` (`salt_minimal`, `salt_wo_redox`, `salt_booster_full`, `salt_booster_minimal`, `salt_booster_wo_redox`).
 
@@ -275,7 +277,7 @@ Notes :
 
 - [x] U2. **Script de calibration two-points + bouton démarrage + bouton reset usine**
 
-**Goal:** Ajouter la séquence interactive complète : un bouton qui orchestre pH7 → pH4 avec multi-capture spread check (R14), NaN guards (R12), garde-fous stricts (R4, R5), flag anti-race (R13), écriture de `g_ph_last_result` (R16) à chaque sortie, notifications HA à chaque étape, et un bouton de reset usine gardé par le flag (R13).
+**Goal:** Ajouter la séquence interactive complète : un bouton qui orchestre pH7 → pH4 avec multi-capture spread check (R14), NaN guards (R12), garde-fous stricts (R4, R5), flag anti-race (R13), écriture de `g_ph_last_result_code` (R16) à chaque sortie, notifications HA à chaque étape, et un bouton de reset usine gardé par le flag (R13).
 
 **Requirements:** R4, R5, R6, R7, R8, R9, R12, R13, R14, R16
 
@@ -289,14 +291,14 @@ Notes :
 - Ajouter un script `_ph_calibration` en `mode: single` (cf. learning ESPHome script mode + Key Technical Decisions). Structure : voir le pseudo-code dans High-Level Technical Design ci-dessus — il est canonique pour cette unité.
 - **R13 — flag set/clear** : à l'entrée du script, `id(g_ph_calibration_in_progress) = true`. Sur **chaque** chemin de sortie (succès final, NaN abort, spread > 50 mV, V_pH7 ≤ V_pH4, slope hors [2.5, 5.0]), remettre à `false` AVANT tout `notify` ou `return`. Vérifier en relecture que le flag est libéré sur les 6 chemins de sortie possibles — sinon le bouton reset reste indéfiniment bloqué après une calib échouée.
 - **R14 — capture multi-échantillon** : à la fin de chaque fenêtre 180 s, faire 3 lectures de `id(ads1115_a1).state` espacées de `delay: 5s`. Stocker dans 3 globals temporaires ou (mieux) dans un `std::vector<float>` local au lambda si la version ESPHome 2026.3.3 le supporte ; sinon utiliser 3 lambdas séquentielles écrivant dans des globals scratch (`g_ph_cap_0`, `g_ph_cap_1`, `g_ph_cap_2`, non-restored, non-exposés). Calculer `spread = max - min`, abort si > 0.050 V. Sinon `v_pH7 = (cap0 + cap1 + cap2) / 3.0`. Mêmes étapes pour pH 4.
-- **R12 — NaN guards** : à *chaque* lecture individuelle (3 par bain × 2 bains = 6 captures), tester `std::isnan(v)` immédiatement. Sur NaN, abort avec notif "Capteur indisponible (pH X)" + `g_ph_last_result = "Echec: capteur indispo (pH X)"` + clear du flag.
-- **R16 — last_result à chaque sortie** : sur chaque chemin (succès et 5 chemins d'erreur), écrire `g_ph_last_result` avec une chaîne courte (≤ 60 chars idéalement) qui résume l'issue. Le format des chaînes est défini dans le pseudo-code HLD. Faire un `component.update: ph_last_result_sensor` après chaque écriture pour rafraîchir HA.
+- **R12 — NaN guards** : à *chaque* lecture individuelle (3 par bain × 2 bains = 6 captures), tester `std::isnan(v)` immédiatement. Sur NaN, abort avec notif "Capteur indisponible (pH X)" + `g_ph_last_result_code = "Echec: capteur indispo (pH X)"` + clear du flag.
+- **R16 — last_result à chaque sortie** : sur chaque chemin (succès et 5 chemins d'erreur), écrire `g_ph_last_result_code` avec une chaîne courte (≤ 60 chars idéalement) qui résume l'issue. Le format des chaînes est défini dans le pseudo-code HLD. Faire un `component.update: ph_last_result_sensor` après chaque écriture pour rafraîchir HA.
 - **Garde-fous stricts (R4, R5)** : calculer `slope_candidate` et `intercept_candidate` dans des variables locales du lambda, vérifier les bornes, puis seulement *si valides* écrire `g_ph_slope` et `g_ph_intercept`. Sur rejet, les globals existants sont préservés (pattern fail-soft).
 - **Notifications wrappées** : chaque `homeassistant.action: persistent_notification.create` est encapsulé dans `if condition: api.connected: then: ...` (cf. `_ntp_alert_once` dans `packages/filtration.yaml:309-321`). Le message de succès embarque slope/intercept calculés.
 - Ajouter un bouton template `Démarrer calibration pH` (`entity_category: config`) qui fait `script.execute: _ph_calibration`.
 - Ajouter un bouton template `Reset calibration pH usine` (`entity_category: config`) avec :
   - **Garde R13** : un `if` `condition: lambda: "return id(g_ph_calibration_in_progress);"` `then: notify "Calibration en cours, reset ignoré"` `else: ...` qui effectue le reset uniquement dans la branche `else`. Ne touche pas g_v_ph7/g_v_ph4 (audit).
-  - Dans la branche `else` : restaurer slope=3.56, intercept=-1.889, écrire `g_ph_last_result = "Reset usine"`, `component.update` sur les 5 sondes diagnostic, et notifier HA "Calibration pH ramenée aux valeurs d'usine".
+  - Dans la branche `else` : restaurer slope=3.56, intercept=-1.889, écrire `g_ph_last_result_code = "Reset usine"`, `component.update` sur les 5 sondes diagnostic, et notifier HA "Calibration pH ramenée aux valeurs d'usine".
 - Mettre à jour le commentaire d'en-tête de fichier (liste des writers de slope/intercept) : `_ph_calibration` (étape de validation), `reset_calibration_ph_usine` (gardé par R13).
 
 **Patterns to follow:**
@@ -308,22 +310,22 @@ Notes :
 **Test scenarios:**
 
 - Happy path / Covers AE1. Plonger sonde dans pH 7 (V≈2.50), presser "Démarrer calibration pH". Attendre 190 s (180 s stabilisation + 10 s pour les 3 sous-captures). Plonger dans pH 4 (V≈1.65). Attendre 190 s. Notif succès "Calibration pH OK — pente=3.529, intercept=-1.824". Sondes diagnostic mises à jour : `pH Slope`=3.529, `pH Intercept`=-1.824, `V_pH7`=2.500 (moyenne), `V_pH4`=1.650, `pH Calibration Last Result`="OK pente=3.529, intercept=-1.824".
-- Error path / Covers AE2 / Covers R4. Démarrer calibration avec sonde dans pH 4 d'abord (V≈1.65 capturé en V_pH7), puis dans pH 7 (V≈2.50 capturé en V_pH4) → V_pH7 ≤ V_pH4 → notif rejet "Calibration rejetée: V_pH7 <= V_pH4 — bains inversés ?", `g_ph_slope` et `g_ph_intercept` inchangés. `g_v_ph7=1.65`, `g_v_ph4=2.50` exposés en diagnostic pour analyse SAV. `g_ph_last_result` = "Rejet: V_pH7<=V_pH4 (bains inversés ?)".
-- Error path / Covers AE3 / Covers R5. Sonde HS donnant V_pH7=2.30, V_pH4=2.00 → slope_candidate = 10.0 (hors [2.5, 5.0]) → notif rejet "Calibration rejetée: pente=10.00 hors plage saine [2.5, 5.0]", globals slope/intercept inchangés. `g_ph_last_result` = "Rejet: pente=10.00 hors plage [2.5,5.0]".
-- Error path / Covers R12. Coupure ADS1115 pendant la 1ʳᵉ sous-capture pH 7 → `id(ads1115_a1).state` retourne NaN → guard déclenché immédiatement → notif "Calibration échouée: capteur indisponible (pH 7)", flag remis à false, aucun global slope/intercept/V modifié. `g_ph_last_result` = "Echec: capteur indispo (pH 7)". Vérifier que le bouton reset redevient utilisable juste après.
+- Error path / Covers AE2 / Covers R4. Démarrer calibration avec sonde dans pH 4 d'abord (V≈1.65 capturé en V_pH7), puis dans pH 7 (V≈2.50 capturé en V_pH4) → V_pH7 ≤ V_pH4 → notif rejet "Calibration rejetée: V_pH7 <= V_pH4 — bains inversés ?", `g_ph_slope` et `g_ph_intercept` inchangés. `g_v_ph7=1.65`, `g_v_ph4=2.50` exposés en diagnostic pour analyse SAV. `g_ph_last_result_code` = "Rejet: V_pH7<=V_pH4 (bains inversés ?)".
+- Error path / Covers AE3 / Covers R5. Sonde HS donnant V_pH7=2.30, V_pH4=2.00 → slope_candidate = 10.0 (hors [2.5, 5.0]) → notif rejet "Calibration rejetée: pente=10.00 hors plage saine [2.5, 5.0]", globals slope/intercept inchangés. `g_ph_last_result_code` = "Rejet: pente=10.00 hors plage [2.5,5.0]".
+- Error path / Covers R12. Coupure ADS1115 pendant la 1ʳᵉ sous-capture pH 7 → `id(ads1115_a1).state` retourne NaN → guard déclenché immédiatement → notif "Calibration échouée: capteur indisponible (pH 7)", flag remis à false, aucun global slope/intercept/V modifié. `g_ph_last_result_code` = "Echec: capteur indispo (pH 7)". Vérifier que le bouton reset redevient utilisable juste après.
 - Error path / Covers R14. Sonde non stabilisée pendant la capture pH 7 : 3 sous-captures donnent 2.450, 2.500, 2.510 → spread = 60 mV > 50 mV → abort + notif "Calibration échouée: capture pH 7 instable (spread=60mV > 50mV)". Globals inchangés. Flag libéré.
 - Error path / Covers R14 (cas mild). 3 sous-captures pH 7 : 2.498, 2.500, 2.502 → spread = 4 mV ≤ 50 mV → V_pH7 = 2.500 (moyenne). Pas d'abort. Calibration continue.
 - Edge case. Repress de "Démarrer calibration pH" pendant qu'une séquence tourne → `mode: single` ignore le second trigger (comportement ESPHome attendu pour `single`). La séquence en cours se termine normalement.
 - Race path / Covers R13. Démarrer calibration. Pendant la phase pH 7 (T=90s), presser "Reset calibration pH usine" → branche `if g_ph_calibration_in_progress` déclenchée → notif "Calibration en cours, reset ignoré", g_ph_slope/intercept inchangés. La calibration en cours continue normalement et écrit ses valeurs finales à T+~390s. Pas d'écriture concurrente.
-- Reset path nominal. Après calibration acceptée (slope=3.529, intercept=-1.824), presser "Reset calibration pH usine" → `g_ph_calibration_in_progress` étant `false`, branche `else` exécutée → `g_ph_slope=3.56`, `g_ph_intercept=-1.889`, `g_ph_last_result`="Reset usine", sondes mises à jour, notif "Calibration pH ramenée aux valeurs d'usine". `g_v_ph7` et `g_v_ph4` restent à 2.50 / 1.65 (audit conservé).
+- Reset path nominal. Après calibration acceptée (slope=3.529, intercept=-1.824), presser "Reset calibration pH usine" → `g_ph_calibration_in_progress` étant `false`, branche `else` exécutée → `g_ph_slope=3.56`, `g_ph_intercept=-1.889`, `g_ph_last_result_code`="Reset usine", sondes mises à jour, notif "Calibration pH ramenée aux valeurs d'usine". `g_v_ph7` et `g_v_ph4` restent à 2.50 / 1.65 (audit conservé).
 - Integration / Covers R15. Pendant une calibration (flag = true), le bloc `interval: 1min` modifié dans U1 ne met PAS à jour `g_store_pool_ph` même si la pompe tourne depuis longtemps. Validation : démarrer la calib avec pump_uptime ≥ pump_uptime_delay, plonger probe en bain pH 7, attendre 65s, lire `pool_ph` dans HA → doit refléter la *dernière valeur d'avant la calib*, pas la lecture du bain tampon.
 - Recovery path / Covers R16. Couper le WiFi du module pendant la phase pH 4 (T=300s). Les notifs HA suivantes ne sont pas délivrées (api.connected = false). Laisser la calib se terminer. Reconnecter le WiFi à T+450s. Le `text_sensor` "pH Calibration Last Result" affiche directement "OK pente=3.529, intercept=-1.824" (R16, restored value), permettant à l'opérateur de constater le succès sans avoir reçu la notif de fin.
 - ESPHome config validation : `esphome config salt_full.yaml` (après `sed`-rewrite) passe sans erreur après ajout du script et des deux boutons. Vérifier que les `if condition:`/`else:` du bouton reset valident schéma.
 
 **Verification:**
 
-- Une calibration nominale produit slope/intercept dans la plage attendue et notifie l'opérateur. `g_ph_last_result` reflète le succès.
-- Une calibration aux valeurs aberrantes (bains inversés, sonde HS, capteur NaN, capture instable) est rejetée — globals inchangés, notif explicite, `g_ph_last_result` documente la raison.
+- Une calibration nominale produit slope/intercept dans la plage attendue et notifie l'opérateur. `g_ph_last_result_code` reflète le succès.
+- Une calibration aux valeurs aberrantes (bains inversés, sonde HS, capteur NaN, capture instable) est rejetée — globals inchangés, notif explicite, `g_ph_last_result_code` documente la raison.
 - Le flag `g_ph_calibration_in_progress` est libéré sur **toutes** les sorties (vérifier les 6 chemins en relecture du YAML) — un `grep g_ph_calibration_in_progress packages/ph.yaml | grep '= false'` doit montrer ≥ 6 occurrences (1 par chemin de sortie).
 - Pendant une calibration, presser le bouton reset notifie sans écrire — vérifié par lecture des sondes diagnostic après le press.
 - Pendant une calibration, `pool_ph` ne se met pas à jour, même pompe tournante.
@@ -385,10 +387,10 @@ Notes :
 ## System-Wide Impact
 
 - **Interaction graph:** Writers de `g_ph_slope` / `g_ph_intercept` : (1) `_ph_calibration` étape 8 (succès), (2) `reset_calibration_ph_usine` — branche `else` du garde R13 uniquement. Le bouton reset gardé par le flag élimine la race avec le script. Reader unique : la lambda du sensor `realtime_ph`. Aucun autre package du repo ne lit `g_ph_offset` (vérifié) ni les nouveaux globals — la suppression et l'ajout sont localisés à `packages/ph.yaml`.
-- **Error propagation:** NaN sur `ads1115_a1.state` se propage en NaN dans `realtime_ph` (comportement actuel, acceptable côté affichage HA = "unknown"). Le chemin de calibration est durci par 3 lignes de défense : (a) NaN guard R12 sur chaque sous-capture, (b) spread check R14 qui détecte les staleness invisibles au NaN guard, (c) bornes R4/R5 sur les valeurs candidates. Les notifications HA sont best-effort (`api.connected` snapshot) ; la vérité durable est dans `g_ph_last_result` (R16).
-- **State lifecycle risks:** 5 globals restaurés (`g_ph_slope`, `g_ph_intercept`, `g_v_ph7`, `g_v_ph4`, `g_ph_last_result`) + 1 global éphémère (`g_ph_calibration_in_progress`, `restore_value: false` — démarre à `false` au boot, donc une coupure de courant en plein milieu d'une calibration laisse le système dans un état où le reset est immédiatement utilisable). À la première OTA depuis l'ancienne version, `g_ph_offset` cesse d'être référencé et son stockage flash est éventuellement réutilisé par ESPHome — pas de fuite de données.
+- **Error propagation:** NaN sur `ads1115_a1.state` se propage en NaN dans `realtime_ph` (comportement actuel, acceptable côté affichage HA = "unknown"). Le chemin de calibration est durci par 3 lignes de défense : (a) NaN guard R12 sur chaque sous-capture, (b) spread check R14 qui détecte les staleness invisibles au NaN guard, (c) bornes R4/R5 sur les valeurs candidates. Les notifications HA sont best-effort (`api.connected` snapshot) ; la vérité durable est dans `g_ph_last_result_code` (R16).
+- **State lifecycle risks:** 5 globals restaurés (`g_ph_slope`, `g_ph_intercept`, `g_v_ph7`, `g_v_ph4`, `g_ph_last_result_code`) + 1 global éphémère (`g_ph_calibration_in_progress`, `restore_value: false` — démarre à `false` au boot, donc une coupure de courant en plein milieu d'une calibration laisse le système dans un état où le reset est immédiatement utilisable). À la première OTA depuis l'ancienne version, `g_ph_offset` cesse d'être référencé et son stockage flash est éventuellement réutilisé par ESPHome — pas de fuite de données.
 - **API surface parity:** Aucune action API HA exposée n'est cassée. Nouvelles entités HA : 4 sondes diagnostic numériques + 1 text_sensor diagnostic + 2 boutons config. Toutes apparaissent par auto-discovery ESPHome.
-- **Integration coverage:** Tests E2E nécessaires sur hardware : (a) calibration nominale en bains tampons, vérifier concordance ±0.1 pH avec un pH-mètre de référence sur la plage 6.8–8.0 ; (b) test de race : presser reset pendant calib, vérifier non-écriture ; (c) test de gating : forcer pompe ON > 20 min, démarrer calib, vérifier `pool_ph` figé ; (d) test de recovery : déconnecter WiFi en plein milieu, vérifier que `g_ph_last_result` reflète l'issue après reconnexion. Aucune simulation logicielle ne couvre ces scénarios.
+- **Integration coverage:** Tests E2E nécessaires sur hardware : (a) calibration nominale en bains tampons, vérifier concordance ±0.1 pH avec un pH-mètre de référence sur la plage 6.8–8.0 ; (b) test de race : presser reset pendant calib, vérifier non-écriture ; (c) test de gating : forcer pompe ON > 20 min, démarrer calib, vérifier `pool_ph` figé ; (d) test de recovery : déconnecter WiFi en plein milieu, vérifier que `g_ph_last_result_code` reflète l'issue après reconnexion. Aucune simulation logicielle ne couvre ces scénarios.
 - **Unchanged invariants:** `pool_ph` reste sampled via `g_store_pool_ph`, latché par le bloc `interval: 1min`. Les **règles de latching changent légèrement** : on conserve les conditions existantes (`pump.is_on` + `pump_uptime ≥ pump_uptime_delay`) ET on ajoute la 3ᵉ branche `!g_ph_calibration_in_progress` (R15). Le filtre `sliding_window_moving_average` sur `realtime_ph` est inchangé. La pin ADS1115 A1 et le gain 6.144V sont inchangés. Aucune modification des modules Redox, filtration, antifreeze, ou de la pump authority.
 
 ---
