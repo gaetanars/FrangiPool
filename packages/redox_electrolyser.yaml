@@ -1,27 +1,4 @@
-# Politique de régulation simplifiée :
-#   Hystérésis pure sur `pool_redox` (mesure échantillonnée — `realtime_redox` n'est
-#   copié dans `g_store_pool_redox` que quand la pompe tourne depuis au moins
-#   `pump_uptime_delay` minutes ; cf. packages/redox.yaml interval 1 min).
-#   Le régulateur 1 minute applique : ORP > setpoint → OFF, ORP < setpoint - 30 → ON,
-#   sinon conserve l'état courant. Aucun débouncer additionnel (compteur de stabilité,
-#   tendance Redox, etc.) — le sampling pump-uptime est le seul filtre temporel.
-#
-#   NaN / 0 mV sont ignorés au début de chaque branche : `g_store_pool_redox` est
-#   `restore_value: true` sans `initial_value`, donc zero-init à 0.0f sur premier
-#   flash, et la chaîne ADS1115 peut produire NaN sur défaillance I²C. La garde
-#   suit le pattern canonique de docs/solutions/architecture/antifreeze-nan-silent-failure.md.
-#
-#   Filet OFF par franchissement : `sensor.pool_redox.on_value_range.above` coupe
-#   en mode Auto au prochain publish de `pool_redox` si l'ORP franchit le setpoint
-#   (max 1 min — même latence que l'interval, mais déclenché par l'événement de
-#   franchissement plutôt que par le tick périodique). Single-direction writer
-#   (OFF uniquement) — ne contredit pas l'hystérésis. Préservé comme garde
-#   anti-surchloration.
-#
-#   Note : tout writer vers `electrolyser` doit être audité parmi les cinq types
-#   (on_value_range / interval / select.on_value / button.on_press / api.actions).
-#   Cf. docs/solutions/architecture/redox-asymmetric-regulation-policy.md (généalogie
-#   du fix) — la liste de review-checklist reste valide ; seule la politique a changé.
+# Politique : voir docs/solutions/architecture/redox-asymmetric-regulation-policy.md
 
 select:
   - platform: template
@@ -43,8 +20,6 @@ select:
           } else if (id(electrolyser_mode).state == "Forcé") {
             id(electrolyser).turn_on();
           } else {
-            // Mode Auto : fail-safe OFF si l'ORP est inconnu (NaN / 0) ou déjà
-            // au-dessus du setpoint. Sinon l'interval 1 min décide au prochain tick.
             float r = id(pool_redox).state;
             if (std::isnan(r) || r <= 0.0f || r > id(redox_setpoint).state) {
               id(electrolyser).turn_off();

@@ -132,10 +132,5 @@ interval:
             - globals.set:
                 id: g_store_pool_redox
                 value: !lambda |-
-                  // Préserver le dernier échantillon valide en cas de défaillance I²C
-                  // ADS1115 : NaN persisté dans la NVS (restore_value: true) survivrait
-                  // au reboot et figerait l'hystérésis sur l'état restauré du relais
-                  // (RESTORE_DEFAULT_ON sur l'electrolyseur). Pattern canonique :
-                  // docs/solutions/architecture/antifreeze-nan-silent-failure.md.
                   float v = id(realtime_redox).state;
                   return std::isnan(v) ? id(g_store_pool_redox) : v;
