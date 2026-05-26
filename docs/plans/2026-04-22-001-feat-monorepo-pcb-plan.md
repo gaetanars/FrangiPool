@@ -1,7 +1,7 @@
 ---
 title: "feat: Fusionner frangipool/pcb dans le monorepo FrangiPool + release unifiée"
 type: feat
-status: active
+status: completed
 date: 2026-04-22
 ---
 

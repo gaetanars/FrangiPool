@@ -177,8 +177,7 @@ The 30-min stability counter (`g_redox_stable_minutes`) and the 5-min trend (`g_
 
 ## Related
 
-- [docs/brainstorms/2026-04-21-redox-regulation-policy-requirements.md](../../brainstorms/2026-04-21-redox-regulation-policy-requirements.md) — Requirements doc for the asymmetric OFF-fast / ON-slow policy.
-- [todos/003-completed-p1-redox-triple-regulation-loop-contradicts-itself.md](../../../todos/003-completed-p1-redox-triple-regulation-loop-contradicts-itself.md) — Original P1 issue writeup.
+- `todos/003-completed-p1-redox-triple-regulation-loop-contradicts-itself.md` — Original P1 issue writeup (gitignored local file).
 - Prior commit `b4849a0` — `refactor(redox): replace min/max thresholds with single setpoint`; unified the two thresholds that had previously masked the contradiction.
 - Fix commit `40156a6` — `fix(redox): asymmetric regulation policy — fast OFF, slow ON` (first bypass: `on_value_range below:` removed).
 - Follow-up fix commit `4358410` — `fix(review): apply ce-code-review findings on PR #6` (second bypass: `select.on_value` Auto branch removed; stability-counter reset added).

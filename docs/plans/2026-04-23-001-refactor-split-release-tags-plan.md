@@ -1,7 +1,7 @@
 ---
 title: "refactor: Split firmware and PCB releases into independent tag-triggered workflows"
 type: refactor
-status: active
+status: completed
 date: 2026-04-23
 origin: docs/brainstorms/2026-04-23-001-split-release-tags-requirements.md
 ---

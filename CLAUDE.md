@@ -56,6 +56,7 @@ Presets ship with `temp_address: "0x0000000000000000"`. Flash as-is over USB, op
 ### Preset → packages composition
 
 The eight `salt_*.yaml` / `salt_booster_*.yaml` files at the repo root are thin composition layers. Each defines only:
+
 - `substitutions:` (device name, Dallas addresses)
 - `esphome.project` (preset name + version)
 - `dashboard_import.package_import_url` (for ESPHome Dashboard "Use a project")
@@ -70,7 +71,7 @@ All logic lives in the eight package files. When adding hardware variants, creat
 | [packages/i2c_ads1115.yaml](packages/i2c_ads1115.yaml) | I²C on GPIO21/22 + ADS1115 @ `0x48`. Required by `redox` and `ph`. |
 | [packages/electrolyser.yaml](packages/electrolyser.yaml) | GPIO27 relay (NOT inverted — `RESTORE_DEFAULT_ON` intentionally). Pure actuator; policy lives in `redox_electrolyser.yaml`. |
 | [packages/redox.yaml](packages/redox.yaml) | ORP sensor on ADS1115 A0, calibration buttons (225 mV / 475 mV / reset). `pool_redox` is sampled once per minute from `realtime_redox` only when pump uptime ≥ `pump_uptime_delay`. |
-| [packages/ph.yaml](packages/ph.yaml) | pH sensor on ADS1115 A1, single-point calibration at 7.00. |
+| [packages/ph.yaml](packages/ph.yaml) | pH sensor on ADS1115 A1, two-point calibration (pH 7 + pH 4) computing slope and intercept. Factory defaults `g_ph_slope = 3.56`, `g_ph_intercept = -1.889`. Calibration result code persisted as `g_ph_last_result_code` (int enum). |
 | [packages/redox_electrolyser.yaml](packages/redox_electrolyser.yaml) | Auto-regulation policy for the electrolyser (see below). |
 | [packages/booster.yaml](packages/booster.yaml) | GPIO26 booster pump relay (active-LOW). |
 
@@ -116,6 +117,7 @@ Do **not** use `mode: queued` with `max_runs: 1` — that combination silently d
 - **Active-LOW relays.** Pump (GPIO25) and booster (GPIO26) use `inverted: true`. The electrolyser (GPIO27) is deliberately **not** inverted and uses `RESTORE_DEFAULT_ON`. Do not "normalize" these — the hardware differs.
 - **`pool_temp` / `pool_redox` / `pool_ph` are sampled, not live.** The `realtime_*` / raw sensors are continuous; the `pool_*` variants latch via `g_store_*` only when the pump has been running longer than `pump_uptime_delay` (default 20 min). Regulation logic should read the sampled values unless it needs the live signal.
 - **Notifications use `homeassistant.action: persistent_notification.create`** wrapped in an `api.connected:` check (see `_ntp_alert_once`, `_invalid_window_alert_once`) so they don't fire into the void during API outages. Latch a "sent" global and clear it when the condition resolves.
+- **Persisted string states use `int` enum globals, not `std::string`.** ESPHome NVS slots are fixed-size; a `std::string` with `restore_value: true` can be silently truncated or empty after reboot. Encode the finite set of states as `int` codes and decode to strings in a `text_sensor` template lambda (`switch/case`). Canonical example: `g_ph_last_result_code` in `packages/ph.yaml`. Full pattern: [docs/solutions/design-patterns/esphome-global-string-restore-int-enum-2026-04-25.md](docs/solutions/design-patterns/esphome-global-string-restore-int-enum-2026-04-25.md).
 
 ### Persistent vs ephemeral state
 
@@ -125,6 +127,8 @@ A handful of globals intentionally differ in `restore_value` — changing these 
 - `g_forced_remaining_s` → **do not restore** (force modes are ephemeral by design — spec R8).
 - `g_ntp_alert_sent`, `g_invalid_window_alert_sent` → **do not restore** (re-alert after reboot).
 - `g_h_debut1/fin1/debut2/fin2`, `g_cycle_phase` → **do not restore** (recomputed on every boot via the `on_time_sync` trigger).
+- `g_ph_slope`, `g_ph_intercept`, `g_v_ph7`, `g_v_ph4`, `g_ph_last_result_code` → **restore** (pH calibration survives reboots and OTA).
+- `g_ph_calibration_in_progress`, `g_ph_abort` → **do not restore** (script execution state — ephemeral).
 
 ### Home Assistant dashboard
 
