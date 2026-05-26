@@ -45,10 +45,6 @@ sensor:
     lambda: |
       if (id(redox_manual_offset).state != 0.0) return ((2500-id(ads1115_a0).state)/1.037) + id(redox_manual_offset).state;
       else return ((2500-id(ads1115_a0).state)/1.037) + id(g_redox_offset);
-    filters:
-      - sliding_window_moving_average:
-          window_size: 12
-          send_every: 3
 
   - platform: template
     name: Redox
@@ -133,4 +129,7 @@ interval:
                 id: g_store_pool_redox
                 value: !lambda |-
                   float v = id(realtime_redox).state;
-                  return std::isnan(v) ? id(g_store_pool_redox) : v;
+                  if (std::isnan(v)) return id(g_store_pool_redox);
+                  float prev = id(g_store_pool_redox);
+                  if (std::isnan(prev)) return v;
+                  return prev * 0.8f + v * 0.2f;
