@@ -13,9 +13,9 @@ select:
     icon: mdi:robot-mower
     on_value:
       - lambda: |-
-          if (id(booster_mode).state == "Off") {
+          if (id(booster_mode).current_option() == "Off") {
             id(booster).turn_off();
-          } else if (id(booster_mode).state == "Forcé") {
+          } else if (id(booster_mode).current_option() == "Forcé") {
             id(booster).turn_on();
           }
 

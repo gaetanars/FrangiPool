@@ -15,9 +15,9 @@ select:
     icon: mdi:chemical-weapon
     on_value:
       - lambda: |-
-          if (id(electrolyser_mode).state == "Off") {
+          if (id(electrolyser_mode).current_option() == "Off") {
             id(electrolyser).turn_off();
-          } else if (id(electrolyser_mode).state == "Forcé") {
+          } else if (id(electrolyser_mode).current_option() == "Forcé") {
             id(electrolyser).turn_on();
           } else {
             float r = id(pool_redox).state;
@@ -46,7 +46,7 @@ sensor:
       - above: !lambda return id(redox_setpoint).state;
         then:
           - lambda: |-
-              if (id(electrolyser_mode).state == "Auto") {
+              if (id(electrolyser_mode).current_option() == "Auto") {
                 id(electrolyser).turn_off();
               }
 
@@ -54,7 +54,7 @@ interval:
   - interval: 1min
     then:
       - lambda: |-
-          if (id(electrolyser_mode).state != "Auto") return;
+          if (id(electrolyser_mode).current_option() != "Auto") return;
           if (!id(pump).state) return;
           if (id(pump_uptime).state < id(pump_uptime_delay).state) return;
 

@@ -301,7 +301,7 @@ text_sensor:
     icon: mdi:thermometer-auto
     update_interval: never
     lambda: |-
-      if (id(filtration_mode).state != "Auto") return {"N/A"};
+      if (id(filtration_mode).current_option() != "Auto") return {"N/A"};
       return id(g_auto_submode) ? std::string{"Hiver"} : std::string{"Courbe"};
 
   - platform: template
@@ -404,7 +404,7 @@ script:
           constexpr int MAX_MIN = 1439;
 
           // Mode Off → fenêtres nulles, pompe dormante
-          if (id(filtration_mode).state == "Off") {
+          if (id(filtration_mode).current_option() == "Off") {
             id(g_h_debut1) = 0; id(g_h_fin1) = 0;
             id(g_h_debut2) = 0; id(g_h_fin2) = 0;
             id(g_cycle_phase) = 0;
@@ -429,7 +429,7 @@ script:
 
           // Détermination du sous-mode (Courbe vs Hiver) AVANT la durée — le
           // résultat pilote aussi le choix du pivot horaire plus bas.
-          std::string mode = id(filtration_mode).state;
+          std::string mode = id(filtration_mode).current_option();
           bool is_winter;
           if (mode == "Courbe") {
             is_winter = false;
@@ -580,7 +580,7 @@ interval:
           }
 
           // Mode Off — ne dépend pas de l'heure, donc vérifié avant le garde NTP.
-          if (id(filtration_mode).state == "Off") {
+          if (id(filtration_mode).current_option() == "Off") {
             if (id(g_cycle_phase) != 0) {
               id(g_cycle_phase) = 0;
               id(filtration_phase).update();
