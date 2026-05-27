@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.3.0] - 2026-05-27
+### :sparkles: New Features
+- [`fd06856`](https://github.com/gaetanars/FrangiPool/commit/fd06856ad6d78880538e687ba4a1343598f8ff56) - **base**: remove secrets dependency for zero-config distribution *(commit by [@gaetanars](https://github.com/gaetanars))*
+- [`fe6d767`](https://github.com/gaetanars/FrangiPool/commit/fe6d7677609497c43c4df7521ecaca157e2258cf) - **distribution**: add web installer, CI firmware compilation, and GitHub Pages *(commit by [@gaetanars](https://github.com/gaetanars))*
+
+### :bug: Bug Fixes
+- [`3d146b0`](https://github.com/gaetanars/FrangiPool/commit/3d146b0ab8e4b5593bdfffec71e81b1e165f0318) - **base**: use http_request platform for OTA instead of esphome *(commit by [@gaetanars](https://github.com/gaetanars))*
+- [`2c8524c`](https://github.com/gaetanars/FrangiPool/commit/2c8524c66efff61a949d277367ae16939727d777) - **presets**: use !include for packages, keep @main for dashboard import only *(commit by [@gaetanars](https://github.com/gaetanars))*
+
+### :memo: Documentation Changes
+
+
 ## [v0.2.0] - 2026-05-26
 ### :sparkles: New Features
 - [`afddcb6`](https://github.com/gaetanars/FrangiPool/commit/afddcb68c96275988efe228476a51c95a8a87cbe) - **filtration**: autonomous ESPHome filtration scheduling *(commit by [@gaetanars](https://github.com/gaetanars))*
@@ -60,3 +72,4 @@ Première release du PCB — carte 5V pour ESP32 avec ADS1115, bus 1-Wire, conne
 
 Imported from [frangipool/pcb](https://github.com/frangipool/pcb) @ `cfd2e9f` (voir aussi [pcb/CHANGELOG.md](pcb/CHANGELOG.md) pour l'archive originale).
 [v0.2.0]: https://github.com/gaetanars/FrangiPool/compare/v0.1.0...v0.2.0
+[v0.3.0]: https://github.com/gaetanars/FrangiPool/compare/v0.2.0...v0.3.0
