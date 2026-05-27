@@ -17,7 +17,7 @@ PCB intégré au monorepo sous [pcb/](pcb/) — détails matériels et Gerbers p
 
 1. Ouvrir le tableau de bord ESPHome → **Nouveau périphérique** → **Utiliser un projet**
 2. Coller l'URL du preset correspondant à votre matériel
-3. Adapter les substitutions (nom de l'appareil, adresses Dallas)
+3. Adapter les substitutions (adresses Dallas des sondes de température)
 4. Flasher → Terminé
 
 ## Configurations disponibles
@@ -39,57 +39,62 @@ Tous les presets incluent la gestion autonome de la filtration. **Auto-régulati
 
 ## Substitutions
 
-Chaque preset définit quatre substitutions à adapter avant de flasher :
+Chaque preset définit deux substitutions à adapter avant de flasher :
 
 ```yaml
 substitutions:
-  name: frangipool                          # Nom ESPHome du périphérique (hostname)
-  friendly_name: FrangiPool                 # Nom affiché dans Home Assistant
   local_temp_address: "0x0000000000000000"  # Adresse Dallas : sonde locale/intérieure
   temp_address: "0x0000000000000000"        # Adresse Dallas : sonde tuyau/piscine
 ```
 
+Le nom (`frangipool`) et le nom affiché (`FrangiPool`) sont fixes et définis dans `packages/base.yaml`.
+
 **Trouver les adresses Dallas :** flasher avec les adresses `0x0000000000000000`, connecter via USB et ouvrir les logs ESPHome. Le scan du bus 1-Wire affiche les adresses découvertes au démarrage.
 
-## Secrets
+## Installation
 
-L'API ESPHome, l'OTA, le WiFi principal et l'AP de secours exigent des secrets définis dans un fichier `secrets.yaml` local (gitignored). Un modèle `secrets.example.yaml` est fourni à la racine du repo.
+### Flux recommandé — zéro fichier de configuration
 
-### Mise en place
+FrangiPool est distribué comme un device prêt à l'emploi. Aucun `secrets.yaml` ni clé API à générer.
 
-1. Copier `secrets.example.yaml` en `secrets.yaml` à la racine du repo (même dossier que les presets `salt_*.yaml`).
-2. Générer une clé API ESPHome fraîche — exactement 32 octets base64 :
+#### Étape 1 — Flash via [ESPHome Web](https://web.esphome.io) (Chrome/Edge + USB)
 
-   ```bash
-   openssl rand -base64 32
-   ```
+Connecte le module ESP32 par USB, ouvre <https://web.esphome.io>, clique **Install** et sélectionne le binaire pré-compilé depuis les [Releases GitHub](../../releases). ESPHome Web détecte automatiquement `improv_serial` et propose de configurer le WiFi directement dans le navigateur.
 
-   Sur Windows sans `openssl` :
+#### Étape 2 — Configuration WiFi sans ordinateur (alternative)
 
-   ```bash
-   python -c "import secrets,base64; print(base64.b64encode(secrets.token_bytes(32)).decode())"
-   ```
+Si ESPHome Web n'est pas disponible, le device démarre un AP ouvert nommé `frangipool-XXXX` (les quatre derniers caractères sont dérivés du MAC). Connecte-toi à cet AP puis ouvre `http://192.168.4.1` pour saisir les identifiants WiFi via le captive portal.
 
-3. Remplir `wifi_ssid`, `wifi_password`, `ap_password` (≥ 8 caractères), `api_encryption_key` (clé générée ci-dessus), `ota_password`.
-4. Adopter le device dans Home Assistant en renseignant la `api_encryption_key` lorsque HA la demande.
+#### Étape 3 — Adoption via ESPHome Dashboard
 
-> **Dashboard ESPHome :** si tu passes par `dashboard_import` (import via URL depuis le tableau de bord ESPHome), le fichier `secrets.yaml` doit se trouver dans le dossier de config de ton dashboard, pas dans ce repo. L'éditeur propose une entrée « Secrets » pour y accéder.
+Une fois le device connecté au réseau, ESPHome Dashboard le découvre par mDNS. Clique **Adopt** : le Dashboard génère automatiquement une `api_encryption_key` et un `ota_password` uniques, les pousse par OTA, et les stocke dans sa configuration locale. Toutes les mises à jour ultérieures se font via OTA depuis le Dashboard.
 
-### Premier flash
+### Sécurité post-adoption
 
-Improv (WiFi provisioning BLE/série) a été retiré pour réduire la surface d'attaque. **Le premier flash doit se faire par USB** avec `secrets.yaml` prêt. Les mises à jour ultérieures peuvent se faire par OTA (authentifié via `ota_password`).
+Avant l'adoption (fenêtre de quelques minutes), l'API est accessible sans chiffrement et l'OTA sans mot de passe — identique aux devices commerciaux (Shelly, Sonoff). Une fois adopté, le Dashboard sécurise le device avec des credentials uniques par appareil.
 
-### Perte de `secrets.yaml`
+### AP de secours (WiFi perdu)
 
-`secrets.yaml` n'est pas committé. S'il est perdu :
+Si le WiFi configuré devient injoignable, l'ESP redémarre en AP ouvert `frangipool-XXXX`. Connecte-toi à cet AP et ouvre `http://192.168.4.1/` pour ressaisir les identifiants WiFi.
 
-- Regénérer une nouvelle `api_encryption_key` et un nouveau `ota_password`.
-- Reflasher le device par USB.
-- Re-adopter le device dans Home Assistant avec la nouvelle clé.
+### Migration depuis v1.x (utilisateurs self-compilers)
 
-### Secours WiFi (captive portal)
+Si tu compilais depuis les sources avec un `secrets.yaml` local, les `!secret wifi_ssid`, `!secret api_encryption_key`, etc. ont été supprimés de `packages/base.yaml`. Migration :
 
-Si le WiFi domestique est injoignable, l'ESP démarre un point d'accès `${friendly_name} Fallback Hotspot` protégé par `ap_password`. Une fois connecté à cet AP, ouvre `http://192.168.4.1/` pour saisir de nouveaux identifiants WiFi. Le captive portal expose aussi un endpoint OTA — d'où l'importance d'un `ap_password` fort.
+- **WiFi** : ajoute `wifi_ssid` et `wifi_password` dans le bloc `substitutions:` de ton preset local (ils surchargent les valeurs vides du package).
+- **API encryption et OTA password** : gérés par ton ESPHome Dashboard depuis l'adoption. Si tu souhaites les forcer dans le firmware compilé, ajoute les blocs suivants directement dans ton preset local (ils prennent priorité sur les packages) :
+
+  ```yaml
+  api:
+    encryption:
+      key: "ta-cle-32-bytes-base64"  # openssl rand -base64 32
+
+  ota:
+    - platform: esphome
+      password: "ton-ota-password"
+  ```
+
+- **`name_add_mac_suffix: true`** est maintenant activé : le nom du device devient `frangipool-XXXX`. Les entity IDs Home Assistant changent de `sensor.frangipool_*` à `sensor.frangipool_xxxx_*`. Renomme les entités dans HA ou mets à jour le dashboard Lovelace.
 
 ## Filtration autonome
 
@@ -251,7 +256,6 @@ Le dashboard utilise le layout **Sections view** (HA 2024.3+) — responsive nat
 
 Les sections pH, Redox, Surpresseur, Électrolyseur et Calibration se masquent automatiquement (visibility natif) si les entités correspondantes sont absentes — un seul fichier couvre tous les presets, du `salt_minimal` au `salt_booster_full`.
 
-> **Adapter au device name :** si votre ESP ne s'appelle pas `frangipool`, remplacez toutes les occurrences de `frangipool` par votre device name (tirets → underscores dans les entity IDs HA).
 > **Uptime :** affiché en secondes brutes — HA ne supporte pas de formatage natif durée pour les capteurs de ce type.
 
 ## Intégration Home Assistant
@@ -382,14 +386,13 @@ Créer un fichier `ma-piscine.yaml` et composer les packages directement :
 
 ```yaml
 substitutions:
-  name: ma-piscine
-  friendly_name: Ma Piscine
   local_temp_address: "0xABCDEF0123456789"
   temp_address: "0x0123456789ABCDEF"
 
 esphome:
-  name: ${name}
-  friendly_name: ${friendly_name}
+  project:
+    name: frangipool.custom
+    version: "0.2.0"
 
 packages:
   base: github://gaetanars/FrangiPool/packages/base.yaml@main

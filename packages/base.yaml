@@ -1,18 +1,18 @@
 substitutions:
-  name: frangipool
-  friendly_name: FrangiPool
   local_temp_address: "0x0000000000000000"
   temp_address: "0x0000000000000000"
 
 esphome:
+  name: frangipool
+  name_add_mac_suffix: true
+  friendly_name: FrangiPool
   min_version: 2024.6.0
 
 wifi:
-  ssid: !secret wifi_ssid
-  password: !secret wifi_password
   ap:
-    ssid: ${friendly_name} Fallback Hotspot
-    password: !secret ap_password
+    ssid: frangipool
+
+improv_serial:
 
 esp32:
   board: nodemcu-32s
@@ -23,12 +23,9 @@ logger:
   level: INFO
 
 api:
-  encryption:
-    key: !secret api_encryption_key
 
 ota:
   - platform: esphome
-    password: !secret ota_password
 
 captive_portal:
 
@@ -170,7 +167,7 @@ binary_sensor:
         - homeassistant.action:
             action: persistent_notification.create
             data:
-              title: Message from ${friendly_name}
+              title: Message from FrangiPool
             data_template:
               message: >-
                 Mode hors-gel actif.
@@ -180,7 +177,7 @@ binary_sensor:
         - homeassistant.action:
             action: persistent_notification.create
             data:
-              title: Message from ${friendly_name}
+              title: Message from FrangiPool
             data_template:
               message: >-
                 Fin du mode hors-gel.

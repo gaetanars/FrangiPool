@@ -349,7 +349,7 @@ script:
             - homeassistant.action:
                 action: persistent_notification.create
                 data:
-                  title: "${friendly_name} - Heure"
+                  title: "FrangiPool - Heure"
                   message: "Heure non synchronisée avec Home Assistant. Pompe à l'arrêt."
             - lambda: 'id(g_ntp_alert_sent) = true;'
 
@@ -366,7 +366,7 @@ script:
             - homeassistant.action:
                 action: persistent_notification.create
                 data:
-                  title: "${friendly_name} - Fenêtres invalides"
+                  title: "FrangiPool - Fenêtres invalides"
                   message: "Le planning de filtration est tronqué par le clamp pivot + pause. Vérifiez Heure Pivot et Durée Pause."
             - lambda: 'id(g_invalid_window_alert_sent) = true;'
 

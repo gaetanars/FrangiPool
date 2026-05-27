@@ -80,7 +80,7 @@ button:
         - homeassistant.action:
             action: persistent_notification.create
             data:
-              title: Message from ${friendly_name}
+              title: Message from FrangiPool
             data_template:
               message: Calibration Redox à 225mV terminée !
 
@@ -101,7 +101,7 @@ button:
         - homeassistant.action:
             action: persistent_notification.create
             data:
-              title: Message from ${friendly_name}
+              title: Message from FrangiPool
             data_template:
               message: Calibration Redox à 475mV terminée !
 
