@@ -1,8 +1,9 @@
 name: Deploy GitHub Pages
 
 on:
-  release:
-    types: [published]
+  workflow_run:
+    workflows: ["Release firmware"]
+    types: [completed]
   workflow_dispatch:
     inputs:
       version:
@@ -20,6 +21,7 @@ concurrency:
 
 jobs:
   deploy:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment:
@@ -35,8 +37,8 @@ jobs:
         run: |
           if [ -n "${{ github.event.inputs.version }}" ]; then
             VERSION="${{ github.event.inputs.version }}"
-          elif [ "${{ github.event_name }}" = "release" ]; then
-            VERSION="${{ github.event.release.tag_name }}"
+          elif [ "${{ github.event_name }}" = "workflow_run" ]; then
+            VERSION="${{ github.event.workflow_run.head_branch }}"
           else
             VERSION=$(gh release list --repo "${{ github.repository }}" --limit 1 --json tagName -q '.[0].tagName')
           fi
