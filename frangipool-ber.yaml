@@ -12,10 +12,10 @@ dashboard_import:
   package_import_url: github://gaetanars/FrangiPool/frangipool-ber.yaml@main
 
 packages:
-  base: github://gaetanars/FrangiPool/packages/base.yaml@main
-  filtration: github://gaetanars/FrangiPool/packages/filtration.yaml@main
-  i2c_ads1115: github://gaetanars/FrangiPool/packages/i2c_ads1115.yaml@main
-  electrolyser: github://gaetanars/FrangiPool/packages/electrolyser.yaml@main
-  booster: github://gaetanars/FrangiPool/packages/booster.yaml@main
-  redox: github://gaetanars/FrangiPool/packages/redox.yaml@main
-  redox_electrolyser: github://gaetanars/FrangiPool/packages/redox_electrolyser.yaml@main
+  base: !include packages/base.yaml
+  filtration: !include packages/filtration.yaml
+  i2c_ads1115: !include packages/i2c_ads1115.yaml
+  electrolyser: !include packages/electrolyser.yaml
+  booster: !include packages/booster.yaml
+  redox: !include packages/redox.yaml
+  redox_electrolyser: !include packages/redox_electrolyser.yaml

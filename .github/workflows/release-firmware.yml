@@ -82,11 +82,7 @@ jobs:
         run: |
           VERSION="${{ github.ref_name }}"
           VERSION="${VERSION#v}"
-          # Inject release version into preset
           sed -i "s/version: \"[^\"]*\"/version: \"${VERSION}\"/" ${{ matrix.preset }}.yaml
-          # Override remote packages with local files (same as validate.yml)
-          sed -i 's|github://gaetanars/FrangiPool/packages/\(.*\)\.yaml@main|!include packages/\1.yaml|g' \
-            ${{ matrix.preset }}.yaml
 
       - name: Compile ${{ matrix.preset }}
         run: esphome compile ${{ matrix.preset }}.yaml

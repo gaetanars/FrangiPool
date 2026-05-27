@@ -28,16 +28,7 @@ CI pins ESPHome to `esphome==2026.3.3` in [.github/workflows/validate.yml](.gith
 
 ### Validating local package edits
 
-By default every preset pulls packages from `github://gaetanars/FrangiPool/packages/<name>.yaml@main`. A plain `esphome config frangipool-erp.yaml` therefore validates against **`main`**, not your working tree — a package edit will appear to "work" but actually wasn't loaded. CI rewrites the URLs to local includes before validating:
-
-```bash
-# Replicate CI locally: point the preset at on-disk packages for validation
-sed -i '' 's|github://gaetanars/FrangiPool/packages/\(.*\)\.yaml@main|!include packages/\1.yaml|g' frangipool-erp.yaml
-esphome config frangipool-erp.yaml
-# ...then `git checkout frangipool-erp.yaml` to revert the URL rewrite.
-```
-
-(macOS `sed` requires the empty `-i ''`; CI runs Linux `sed -i` without the argument.)
+Presets use `!include packages/<name>.yaml` — they always resolve against the working tree. A plain `esphome config frangipool-erp.yaml` validates the local packages directly, no URL rewriting needed.
 
 ### Dallas probe addressing
 

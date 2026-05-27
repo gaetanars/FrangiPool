@@ -12,6 +12,6 @@ dashboard_import:
   package_import_url: github://gaetanars/FrangiPool/frangipool-e.yaml@main
 
 packages:
-  base: github://gaetanars/FrangiPool/packages/base.yaml@main
-  filtration: github://gaetanars/FrangiPool/packages/filtration.yaml@main
-  electrolyser: github://gaetanars/FrangiPool/packages/electrolyser.yaml@main
+  base: !include packages/base.yaml
+  filtration: !include packages/filtration.yaml
+  electrolyser: !include packages/electrolyser.yaml
