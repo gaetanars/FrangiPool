@@ -1,19 +1,22 @@
 substitutions:
   local_temp_address: "0x0000000000000000"  # Remplacer par l'adresse de votre sonde locale (voir logs ESPHome au démarrage)
   temp_address: "0x0000000000000000"  # Remplacer par l'adresse de votre sonde canalisation
+  preset_slug: "berp"
 
 esphome:
   project:
-    name: frangipool.salt_wo_ph
+    name: frangipool.berp
     version: "0.2.0"
 
 dashboard_import:
-  package_import_url: github://gaetanars/FrangiPool/salt_wo_ph.yaml@main
+  package_import_url: github://gaetanars/FrangiPool/frangipool-berp.yaml@main
 
 packages:
   base: github://gaetanars/FrangiPool/packages/base.yaml@main
   filtration: github://gaetanars/FrangiPool/packages/filtration.yaml@main
   i2c_ads1115: github://gaetanars/FrangiPool/packages/i2c_ads1115.yaml@main
   electrolyser: github://gaetanars/FrangiPool/packages/electrolyser.yaml@main
+  booster: github://gaetanars/FrangiPool/packages/booster.yaml@main
   redox: github://gaetanars/FrangiPool/packages/redox.yaml@main
+  ph: github://gaetanars/FrangiPool/packages/ph.yaml@main
   redox_electrolyser: github://gaetanars/FrangiPool/packages/redox_electrolyser.yaml@main

@@ -17,20 +17,17 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  release:
+  preflight:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 5
+    outputs:
+      prev_tag: ${{ steps.prev.outputs.prev_tag }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
         with:
-          # requarks/changelog-action et git tag --list ont besoin de l'historique complet.
           fetch-depth: 0
 
       - name: Verify tag commit is on origin/main
-        # Garde A4 : empêche un tag poussé depuis une feat branch ou un commit
-        # détaché de polluer CHANGELOG.md sur main avec une entrée fantôme.
-        # Refname-exact match (pas `grep 'origin/main$'`) pour éviter les faux positifs
-        # si un second remote ou une branche `feat-main` existe.
         run: |
           git fetch origin main --quiet
           if ! git branch -r --contains "${{ github.sha }}" --format='%(refname)' | grep -Fxq 'refs/remotes/origin/main'; then
@@ -39,8 +36,6 @@ jobs:
           fi
 
       - name: Fail fast if release already exists
-        # Garde anti-remplacement silencieux : un force-retag sur un tag déjà publié
-        # écraserait la release existante sans trace.
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -51,11 +46,6 @@ jobs:
 
       - name: Compute previous firmware tag
         id: prev
-        # Skip-by-name (pas par position) pour rester correct sur un retag
-        # forward-looking d'une version non-latest. Guard empty rend l'erreur
-        # bruyante au lieu de silencieuse.
-        # Pattern v[0-9]* (un chiffre puis wildcard) — v[0-9][0-9]* exigerait
-        # deux chiffres et ne correspondrait pas aux tags v0.x.x à un seul chiffre.
         run: |
           prev_tag=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | grep -v -Fx "${{ github.ref_name }}" | head -n1)
           if [ -z "$prev_tag" ]; then
@@ -65,18 +55,89 @@ jobs:
           echo "prev_tag=$prev_tag" >> "$GITHUB_OUTPUT"
           echo "- Previous firmware tag: $prev_tag" >> "$GITHUB_STEP_SUMMARY"
 
+  compile:
+    needs: preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        preset:
+          - frangipool-e
+          - frangipool-er
+          - frangipool-ep
+          - frangipool-erp
+          - frangipool-be
+          - frangipool-ber
+          - frangipool-bep
+          - frangipool-berp
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+
+      - name: Install ESPHome
+        run: pip install "esphome==2026.3.3"  # pin to tested version — update when upgrading locally
+
+      - name: Prepare preset for compilation
+        run: |
+          VERSION="${{ github.ref_name }}"
+          VERSION="${VERSION#v}"
+          # Inject release version into preset
+          sed -i "s/version: \"[^\"]*\"/version: \"${VERSION}\"/" ${{ matrix.preset }}.yaml
+          # Override remote packages with local files (same as validate.yml)
+          sed -i 's|github://gaetanars/FrangiPool/packages/\(.*\)\.yaml@main|!include packages/\1.yaml|g' \
+            ${{ matrix.preset }}.yaml
+
+      - name: Compile ${{ matrix.preset }}
+        run: esphome compile ${{ matrix.preset }}.yaml
+
+      - name: Collect firmware binaries
+        run: |
+          VERSION="${{ github.ref_name }}"
+          VERSION="${VERSION#v}"
+          PRESET="${{ matrix.preset }}"
+          # ESPHome names the build dir after esphome.name (= 'frangipool' from base.yaml substitution)
+          BUILD_DIR=".esphome/build/frangipool/.pioenvs/frangipool"
+          mkdir -p firmware
+          cp "${BUILD_DIR}/firmware.factory.bin" "firmware/${PRESET}-v${VERSION}.factory.bin"
+          cp "${BUILD_DIR}/firmware.ota.bin"     "firmware/${PRESET}-v${VERSION}.ota.bin"
+          echo "- Built ${PRESET}-v${VERSION}.factory.bin + .ota.bin" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload firmware artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-${{ matrix.preset }}
+          path: firmware/
+          retention-days: 1
+
+  release:
+    needs: [preflight, compile]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        with:
+          fetch-depth: 0
+
+      - name: Download all firmware binaries
+        uses: actions/download-artifact@v4
+        with:
+          pattern: firmware-*
+          path: firmware/
+          merge-multiple: true
+
+      - name: List collected binaries
+        run: ls -lh firmware/ >> "$GITHUB_STEP_SUMMARY"
+
       - name: Generate release notes + update CHANGELOG
         id: changelog
         uses: requarks/changelog-action@b78a3354a01f4a1affb484b9264b506a815c46b1  # v1.10.3
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           fromTag: ${{ github.ref_name }}
-          toTag: ${{ steps.prev.outputs.prev_tag }}
+          toTag: ${{ needs.preflight.outputs.prev_tag }}
           changelogFilePath: CHANGELOG.md
-          # excludeTypes hérité de l'ancien release.yml pour préserver le filtre de bruit.
           excludeTypes: chore,style,build
-          # excludeScopes : `changelog` filtre le commit auto-généré ; `pcb` tient les
-          # commits PCB hors des notes firmware (ils sont documentés côté pcb-*).
           excludeScopes: changelog,pcb
 
       - name: Compose release body
@@ -88,6 +149,22 @@ jobs:
           {
             echo "body<<${delimiter}"
             printf '%s\n' "$CHANGELOG_BODY"
+            echo ""
+            echo "---"
+            echo "**Binaires compilés** — flasher sans ESPHome installé :"
+            echo "| Preset | Features | Flash initial | Mise à jour OTA |"
+            echo "|--------|----------|--------------|-----------------|"
+            echo "| \`frangipool-e\`    | Électrolyseur                      | [factory](...) | [ota](...) |"
+            echo "| \`frangipool-er\`   | Électrolyseur + Redox              | [factory](...) | [ota](...) |"
+            echo "| \`frangipool-ep\`   | Électrolyseur + pH                 | [factory](...) | [ota](...) |"
+            echo "| \`frangipool-erp\`  | Électrolyseur + Redox + pH         | [factory](...) | [ota](...) |"
+            echo "| \`frangipool-be\`   | Booster + Électrolyseur            | [factory](...) | [ota](...) |"
+            echo "| \`frangipool-ber\`  | Booster + Électrolyseur + Redox    | [factory](...) | [ota](...) |"
+            echo "| \`frangipool-bep\`  | Booster + Électrolyseur + pH       | [factory](...) | [ota](...) |"
+            echo "| \`frangipool-berp\` | Booster + Électrolyseur + Redox + pH | [factory](...) | [ota](...) |"
+            echo ""
+            echo "**Flash initial** (\`.factory.bin\`) : via [web.esphome.io](https://web.esphome.io) ou le web installer FrangiPool."
+            echo "**OTA** (\`.ota.bin\`) : si l'ESP tourne déjà sous FrangiPool, utilisez le composant Update dans Home Assistant."
             echo "${delimiter}"
           } >> "$GITHUB_OUTPUT"
           echo "- Composed release body for ${{ github.ref_name }}" >> "$GITHUB_STEP_SUMMARY"
@@ -96,8 +173,6 @@ jobs:
         uses: stefanzweifel/git-auto-commit-action@04702edda442b2e678b25b537cec683a1493fcb9  # v7.1.0
         with:
           branch: main
-          # Scope `changelog` matche l'excludeScopes du prochain run pour filtrage.
-          # `[skip ci]` coupe le déclenchement de validate.yml sur ce commit.
           commit_message: 'docs(changelog): update CHANGELOG.md for ${{ github.ref_name }} [skip ci]'
           file_pattern: CHANGELOG.md
 
@@ -108,12 +183,13 @@ jobs:
         uses: ncipollo/release-action@339a81892b84b4eeb0f6e744e4574d79d0d9b8dd  # v1.21.0
         with:
           allowUpdates: true
-          # `legacy` délègue à la comparaison semver de GitHub, qui garde le tag
-          # sémantiquement le plus récent en "latest" peu importe l'ordre de push.
           makeLatest: legacy
           name: ${{ github.ref_name }}
           body: ${{ steps.release_notes.outputs.body }}
+          artifacts: "firmware/*.bin"
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Log release creation to step summary
-        run: echo "- GitHub Release ${{ github.ref_name }} created/updated (firmware, no asset)" >> "$GITHUB_STEP_SUMMARY"
+        run: |
+          BIN_COUNT=$(ls firmware/*.bin 2>/dev/null | wc -l)
+          echo "- GitHub Release ${{ github.ref_name }} created with ${BIN_COUNT} firmware binaries" >> "$GITHUB_STEP_SUMMARY"

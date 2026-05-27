@@ -26,14 +26,16 @@ Choisissez le preset correspondant à votre matériel :
 
 | Preset | Électrolyseur | Redox | pH | Auto-régulation | Surpresseur | URL |
 | -------- | :---: | :---: | :---: | :---: | :---: | --- |
-| `salt_full` | ✓ | ✓ | ✓ | ✓ | — | `github://gaetanars/FrangiPool/salt_full.yaml@main` |
-| `salt_wo_ph` | ✓ | ✓ | — | ✓ | — | `github://gaetanars/FrangiPool/salt_wo_ph.yaml@main` |
-| `salt_wo_redox` | ✓ | — | ✓ | — | — | `github://gaetanars/FrangiPool/salt_wo_redox.yaml@main` |
-| `salt_minimal` | ✓ | — | — | — | — | `github://gaetanars/FrangiPool/salt_minimal.yaml@main` |
-| `salt_booster_full` | ✓ | ✓ | ✓ | ✓ | ✓ | `github://gaetanars/FrangiPool/salt_booster_full.yaml@main` |
-| `salt_booster_wo_ph` | ✓ | ✓ | — | ✓ | ✓ | `github://gaetanars/FrangiPool/salt_booster_wo_ph.yaml@main` |
-| `salt_booster_wo_redox` | ✓ | — | ✓ | — | ✓ | `github://gaetanars/FrangiPool/salt_booster_wo_redox.yaml@main` |
-| `salt_booster_minimal` | ✓ | — | — | — | ✓ | `github://gaetanars/FrangiPool/salt_booster_minimal.yaml@main` |
+| `frangipool-erp` | ✓ | ✓ | ✓ | ✓ | — | `github://gaetanars/FrangiPool/frangipool-erp.yaml@main` |
+| `frangipool-er` | ✓ | ✓ | — | ✓ | — | `github://gaetanars/FrangiPool/frangipool-er.yaml@main` |
+| `frangipool-ep` | ✓ | — | ✓ | — | — | `github://gaetanars/FrangiPool/frangipool-ep.yaml@main` |
+| `frangipool-e` | ✓ | — | — | — | — | `github://gaetanars/FrangiPool/frangipool-e.yaml@main` |
+| `frangipool-berp` | ✓ | ✓ | ✓ | ✓ | ✓ | `github://gaetanars/FrangiPool/frangipool-berp.yaml@main` |
+| `frangipool-ber` | ✓ | ✓ | — | ✓ | ✓ | `github://gaetanars/FrangiPool/frangipool-ber.yaml@main` |
+| `frangipool-bep` | ✓ | — | ✓ | — | ✓ | `github://gaetanars/FrangiPool/frangipool-bep.yaml@main` |
+| `frangipool-be` | ✓ | — | — | — | ✓ | `github://gaetanars/FrangiPool/frangipool-be.yaml@main` |
+
+**Nomenclature des flags :** B = Surpresseur (Booster), E = Électrolyseur, R = Redox/ORP, P = pH. Ordre fixe B > E > R > P. Tous les presets incluent la filtration autonome, l'antigel et la sonde de température. **Auto-régulation** : contrôle automatique de l'électrolyseur selon les seuils Redox (nécessite E + R).
 
 Tous les presets incluent la gestion autonome de la filtration. **Auto-régulation** : contrôle automatique de l'électrolyseur selon les seuils Redox (nécessite électrolyseur + Redox).
 
@@ -254,7 +256,7 @@ Le dashboard utilise le layout **Sections view** (HA 2024.3+) — responsive nat
 - **Calibration** : boutons 225 mV / 475 mV / Reset + offset Redox courant + rappel de procédure.
 - **Diagnostics** : connexion ESP, RSSI, uptime, antigel, redémarrage.
 
-Les sections pH, Redox, Surpresseur, Électrolyseur et Calibration se masquent automatiquement (visibility natif) si les entités correspondantes sont absentes — un seul fichier couvre tous les presets, du `salt_minimal` au `salt_booster_full`.
+Les sections pH, Redox, Surpresseur, Électrolyseur et Calibration se masquent automatiquement (visibility natif) si les entités correspondantes sont absentes — un seul fichier couvre tous les presets, du `frangipool-e` au `frangipool-berp`.
 
 > **Uptime :** affiché en secondes brutes — HA ne supporte pas de formatage natif durée pour les capteurs de ce type.
 
@@ -320,7 +322,8 @@ Les Gerbers prêts pour fabrication sont publiés en tant qu'asset `gerber.zip` 
 
 Firmware et PCB ont des cycles de vie indépendants. Deux workflows tag-triggered, miroirs, produisent chacune leurs releases :
 
-- [.github/workflows/release-firmware.yml](.github/workflows/release-firmware.yml) — tags `v*.*.*`, écrit dans `CHANGELOG.md`, aucun asset attaché.
+- [.github/workflows/release-firmware.yml](.github/workflows/release-firmware.yml) — tags `v*.*.*`, compile les 8 presets, écrit dans `CHANGELOG.md`, attache les 16 binaires (`.factory.bin` + `.ota.bin` par preset).
+- [.github/workflows/deploy-pages.yml](.github/workflows/deploy-pages.yml) — déclenché par chaque release firmware, génère les manifests ESP Web Tools + ESPHome OTA et déploie [gaetanars.github.io/FrangiPool](https://gaetanars.github.io/FrangiPool).
 - [.github/workflows/release-pcb.yml](.github/workflows/release-pcb.yml) — tags `pcb-*.*.*`, écrit dans `pcb/CHANGELOG.md`, asset `gerber.zip` attaché.
 
 Les deux workflows partagent un `concurrency:` group `release-main` — un push combiné `git push origin main v0.2.0 pcb-0.1.1` sérialise proprement les deux auto-commits `main` sans fenêtre de race.
@@ -331,7 +334,7 @@ Les deux workflows partagent un `concurrency:` group `release-main` — un push 
 2. Vérifier les commits [Conventional Commits](https://www.conventionalcommits.org/) depuis le dernier tag `v*.*.*`.
 3. **Toujours tagger un commit déjà sur `main`** — jamais depuis une feat branch ou un état détaché. La workflow refuse les tags pointant sur un commit absent de `origin/main`.
 4. Pousser le tag : `git tag vX.Y.Z && git push origin main vX.Y.Z`.
-5. Vérifier dans l'onglet Actions que `release-firmware.yml` est `success`, puis sur la page [Releases](https://github.com/gaetanars/FrangiPool/releases) que la nouvelle release est créée (firmware n'attache pas d'asset — c'est attendu).
+5. Vérifier dans l'onglet Actions que `release-firmware.yml` est `success` (compilation + release), puis que `deploy-pages.yml` termine le déploiement. La [page d'installation](https://gaetanars.github.io/FrangiPool) pointe automatiquement vers la nouvelle version.
 
 Le tag doit matcher la regex `v[0-9]+.[0-9]+.[0-9]+` (pas de suffixes `-rc`, `-test`, etc.).
 

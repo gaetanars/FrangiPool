@@ -26,14 +26,14 @@ jobs:
     strategy:
       matrix:
         config:
-          - salt_minimal.yaml
-          - salt_full.yaml
-          - salt_wo_ph.yaml
-          - salt_wo_redox.yaml
-          - salt_booster_minimal.yaml
-          - salt_booster_full.yaml
-          - salt_booster_wo_ph.yaml
-          - salt_booster_wo_redox.yaml
+          - frangipool-e.yaml
+          - frangipool-er.yaml
+          - frangipool-ep.yaml
+          - frangipool-erp.yaml
+          - frangipool-be.yaml
+          - frangipool-ber.yaml
+          - frangipool-bep.yaml
+          - frangipool-berp.yaml
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
 

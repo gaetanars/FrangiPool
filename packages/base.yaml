@@ -1,6 +1,7 @@
 substitutions:
   local_temp_address: "0x0000000000000000"
   temp_address: "0x0000000000000000"
+  preset_slug: "erp"  # Overridden by each preset — used to build the OTA manifest URL
 
 esphome:
   name: frangipool
@@ -28,6 +29,16 @@ ota:
   - platform: esphome
 
 captive_portal:
+
+http_request:
+  useragent: esphome/frangipool
+  timeout: 10s
+
+update:
+  - platform: http_request
+    name: "Mise à jour FrangiPool"
+    source: "https://gaetanars.github.io/FrangiPool/install/${preset_slug}/manifest.json"
+    entity_category: config
 
 time:
   - platform: homeassistant

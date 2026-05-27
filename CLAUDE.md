@@ -10,42 +10,34 @@ ESPHome firmware-as-configuration for an ESP32 that autonomously runs a salt-poo
 
 ## Common commands
 
-All ESPHome commands are run from the repo root against a preset (`salt_*.yaml`) — never against a `packages/*.yaml` file (those lack `esphome:` top-level and will not validate standalone).
+All ESPHome commands are run from the repo root against a preset (`frangipool-*.yaml`) — never against a `packages/*.yaml` file (those lack `esphome:` top-level and will not validate standalone).
 
 ```bash
 # Validate a preset's configuration (Python ESPHome CLI required)
-esphome config salt_full.yaml
+esphome config frangipool-erp.yaml
 
 # Compile firmware (caches under .esphome/)
-esphome compile salt_full.yaml
+esphome compile frangipool-erp.yaml
 
 # Upload OTA and stream logs
-esphome run salt_full.yaml
-esphome logs salt_full.yaml
+esphome run frangipool-erp.yaml
+esphome logs frangipool-erp.yaml
 ```
 
 CI pins ESPHome to `esphome==2026.3.3` in [.github/workflows/validate.yml](.github/workflows/validate.yml) — match it locally when validating changes you intend to merge.
 
 ### Validating local package edits
 
-By default every preset pulls packages from `github://gaetanars/FrangiPool/packages/<name>.yaml@main`. A plain `esphome config salt_full.yaml` therefore validates against **`main`**, not your working tree — a package edit will appear to "work" but actually wasn't loaded. CI rewrites the URLs to local includes before validating:
+By default every preset pulls packages from `github://gaetanars/FrangiPool/packages/<name>.yaml@main`. A plain `esphome config frangipool-erp.yaml` therefore validates against **`main`**, not your working tree — a package edit will appear to "work" but actually wasn't loaded. CI rewrites the URLs to local includes before validating:
 
 ```bash
 # Replicate CI locally: point the preset at on-disk packages for validation
-sed -i '' 's|github://gaetanars/FrangiPool/packages/\(.*\)\.yaml@main|!include packages/\1.yaml|g' salt_full.yaml
-esphome config salt_full.yaml
-# ...then `git checkout salt_full.yaml` to revert the URL rewrite.
+sed -i '' 's|github://gaetanars/FrangiPool/packages/\(.*\)\.yaml@main|!include packages/\1.yaml|g' frangipool-erp.yaml
+esphome config frangipool-erp.yaml
+# ...then `git checkout frangipool-erp.yaml` to revert the URL rewrite.
 ```
 
 (macOS `sed` requires the empty `-i ''`; CI runs Linux `sed -i` without the argument.)
-
-A `secrets.yaml` must exist at the repo root for any validate/compile call. Seed from the example:
-
-```bash
-cp secrets.example.yaml secrets.yaml   # placeholder values pass schema but are unsafe to flash
-```
-
-The real API key must be exactly 32 bytes base64 — generate with `openssl rand -base64 32`.
 
 ### Dallas probe addressing
 
@@ -55,7 +47,7 @@ Presets ship with `temp_address: "0x0000000000000000"`. Flash as-is over USB, op
 
 ### Preset → packages composition
 
-The eight `salt_*.yaml` / `salt_booster_*.yaml` files at the repo root are thin composition layers. Each defines only:
+The eight `frangipool-*.yaml` files at the repo root are thin composition layers. Each defines only:
 
 - `substitutions:` (device name, Dallas addresses)
 - `esphome.project` (preset name + version)
@@ -91,7 +83,7 @@ Any new code that writes to `pump` (e.g. a new forced button, an HA API action) 
 
 ### Electrolyser regulation: hysteresis with pump-uptime gate
 
-`packages/redox_electrolyser.yaml` regulates the chlorine electrolyser with pure hysteresis on `pool_redox`. The historical "fast OFF / slow ON with 30-min stability gate" was removed because the pump-uptime sampling in `packages/redox.yaml` was already filtering transient noise, making the second-stage debouncer redundant and confusing. The genealogy of the original fix and the rationale for the simplification are in [docs/solutions/architecture/redox-asymmetric-regulation-policy.md](docs/solutions/architecture/redox-asymmetric-regulation-policy.md) (see the "Update 2026-04-26" section).
+`packages/redox_electrolyser.yaml` regulates the chlorine electrolyser with pure hysteresis on `pool_redox`. The historical "fast OFF / slow ON with 30-min stability gate" was removed because the pump-uptime sampling in `packages/redox.yaml` was already filtering transient noise, making the second-stage debouncer redundant and confusing.
 
 Current model:
 
@@ -99,17 +91,17 @@ Current model:
 - **`sensor.pool_redox.on_value_range.above`** kept as a sub-second OFF safety net for over-chlorination — single-direction writer (OFF only), does not contradict the interval.
 - **`select.electrolyser_mode.on_value`** handles Off/Forcé immediately. The Auto branch only applies an immediate OFF if `pool_redox > setpoint`; otherwise it delegates to the next interval tick.
 
-When editing any `electrolyser.turn_on` / `electrolyser.turn_off` call, enumerate all five writer types: `on_value_range`, `interval`, `select.on_value` (including Auto/else branches), `button.on_press`, and `api.actions`. The review checklist in the linked doc remains authoritative on the writer-enumeration discipline — only the policy implemented changed (no more stability-counter gate to verify, just hysteresis + pump-uptime gate).
+When editing any `electrolyser.turn_on` / `electrolyser.turn_off` call, enumerate all five writer types and verify each one is consistent: `on_value_range`, `interval`, `select.on_value` (including Auto/else branches), `button.on_press`, and `api.actions`. Any new writer must not bypass or contradict the `interval: 1min` authoritative regulator.
 
 ### Safety-critical lambda pattern (NaN guards)
 
-Template sensors / binary_sensors that read Dallas probes (e.g. `pipe_temp_raw`) must guard `std::isnan` at the top of the lambda and return the last known state — returning `false` unconditionally silently locks an antifreeze latch OFF forever on probe failure ([docs/solutions/architecture/antifreeze-nan-silent-failure.md](docs/solutions/architecture/antifreeze-nan-silent-failure.md)). `filters: delayed_on/delayed_off` and `device_class: cold` do **not** help here — NaN short-circuits the comparisons before the filters ever see an edge.
+Template sensors / binary_sensors that read Dallas probes (e.g. `pipe_temp_raw`) must guard `std::isnan` at the top of the lambda and return the last known state — returning `false` unconditionally silently locks an antifreeze latch OFF forever on probe failure. `filters: delayed_on/delayed_off` and `device_class: cold` do **not** help here — NaN short-circuits the comparisons before the filters ever see an edge.
 
 ### ESPHome `script:` mode selection
 
 For any script with more than ~3 trigger sources, default to `mode: restart` provided the lambda is pure (reads current entity state, writes globals + `component.update` at the end). `_calcul_filtration` is the canonical example — its 10 triggers (mode select, 5 number entities, pivot datetime, time sync, midnight cron, end-of-window) coalesce correctly under `restart`.
 
-Do **not** use `mode: queued` with `max_runs: 1` — that combination silently drops triggers during bursts (HA slider drag produces `script already running, discarding trigger` warnings). Full rationale + decision table in [docs/solutions/architecture/esphome-script-mode-queued-vs-restart.md](docs/solutions/architecture/esphome-script-mode-queued-vs-restart.md).
+Do **not** use `mode: queued` with `max_runs: 1` — that combination silently drops triggers during bursts (HA slider drag produces `script already running, discarding trigger` warnings in the logs with no visible failure).
 
 ### Conventions baked into the code
 
@@ -117,7 +109,7 @@ Do **not** use `mode: queued` with `max_runs: 1` — that combination silently d
 - **Active-LOW relays.** Pump (GPIO25) and booster (GPIO26) use `inverted: true`. The electrolyser (GPIO27) is deliberately **not** inverted and uses `RESTORE_DEFAULT_ON`. Do not "normalize" these — the hardware differs.
 - **`pool_temp` / `pool_redox` / `pool_ph` are sampled, not live.** The `realtime_*` / raw sensors are continuous; the `pool_*` variants latch via `g_store_*` only when the pump has been running longer than `pump_uptime_delay` (default 20 min). Regulation logic should read the sampled values unless it needs the live signal.
 - **Notifications use `homeassistant.action: persistent_notification.create`** wrapped in an `api.connected:` check (see `_ntp_alert_once`, `_invalid_window_alert_once`) so they don't fire into the void during API outages. Latch a "sent" global and clear it when the condition resolves.
-- **Persisted string states use `int` enum globals, not `std::string`.** ESPHome NVS slots are fixed-size; a `std::string` with `restore_value: true` can be silently truncated or empty after reboot. Encode the finite set of states as `int` codes and decode to strings in a `text_sensor` template lambda (`switch/case`). Canonical example: `g_ph_last_result_code` in `packages/ph.yaml`. Full pattern: [docs/solutions/design-patterns/esphome-global-string-restore-int-enum-2026-04-25.md](docs/solutions/design-patterns/esphome-global-string-restore-int-enum-2026-04-25.md).
+- **Persisted string states use `int` enum globals, not `std::string`.** ESPHome NVS slots are fixed-size; a `std::string` with `restore_value: true` can be silently truncated or empty after reboot. Encode the finite set of states as `int` codes and decode to strings in a `text_sensor` template lambda (`switch/case`). Canonical example: `g_ph_last_result_code` in `packages/ph.yaml`.
 
 ### Persistent vs ephemeral state
 
@@ -136,9 +128,19 @@ A handful of globals intentionally differ in `restore_value` — changing these 
 
 Default to **dropping dashboard references** rather than re-adding firmware entities that YAGNI already removed — do not resurrect a package entity just to satisfy a dashboard card; delete the card instead.
 
+### Release CI workflow invariants
+
+The guards in the release workflows are intentional — do not remove them:
+
+- **Tag on `origin/main` only** — the refname-exact check (`grep -Fxq 'refs/remotes/origin/main'`) prevents releases from feat branches. Always tag a commit already on `main`.
+- **Idempotence guard** — `gh release view` before creating prevents silent overwrites on force-retag. To retag: `gh release delete vX.Y.Z --yes && git tag -d vX.Y.Z && git push origin :refs/tags/vX.Y.Z`, then re-tag.
+- **Prev-tag by name, not position** — `grep -v -Fx "$current_tag"` skips the current tag by name so forward-looking retags compute the correct diff window.
+- **`pcb-0.1.0` is a seed anchor** — never delete or move it. It is the base for `git tag --list 'pcb-*'` prev-tag computation. The workflow skips it via an explicit guard.
+- **Shared concurrency group `release-main`** — both firmware and PCB workflows share it to prevent CHANGELOG auto-commit races on simultaneous tag pushes.
+- **CHANGELOG commit before release publish** — `stefanzweifel/git-auto-commit-action` runs before `ncipollo/release-action` so the release notes SHA matches the committed file.
+- **`makeLatest: legacy` for firmware, `false` for PCB** — GitHub's semver comparison keeps the highest firmware version as "latest"; PCB releases must never steal that badge.
+
 ## Where to find more context
 
-- [README.md](README.md) — user-facing documentation (preset matrix, substitutions, secrets workflow, full filtration spec, HA migration v1.x → v2.0).
-- [docs/solutions/](docs/solutions/) — documented solutions to past problems (post-mortems, design patterns, workflow learnings) organized by category (`architecture/`, `design-patterns/`, …) with YAML frontmatter (`module`, `tags`, `problem_type`). Re-read before touching the antifreeze lambda, the ORP regulator, multi-trigger scripts, or making decisions in any documented area.
-- [docs/plans/](docs/plans/) and [docs/brainstorms/](docs/brainstorms/) — requirements docs and implementation plans for recent or in-flight changes.
+- [README.md](README.md) — user-facing documentation (preset matrix, installation, filtration spec, HA migration v1.x → v2.0).
 - [todos/](todos/) — gitignored local work queue; read-only reference when working on a matching topic.
