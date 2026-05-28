@@ -45,71 +45,31 @@ jobs:
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "- Deploying manifests for ${VERSION}" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Download firmware binaries for all presets
+      - name: Download web installer assets for all presets
         env:
           VERSION: ${{ steps.version.outputs.version }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           for SLUG in e er ep erp be ber bep berp; do
             DIR="docs/install/${SLUG}"
-            mkdir -p "${DIR}"
+            TMP="/tmp/pages-${SLUG}"
+            mkdir -p "${DIR}" "${TMP}"
+
+            # Download all pages assets for this preset (slug-prefixed in the release)
             gh release download "$VERSION" \
               --repo "${{ github.repository }}" \
-              --pattern "frangipool-${SLUG}-*.factory.bin" \
-              --dir "${DIR}"
-            echo "- Downloaded frangipool-${SLUG} factory binary" >> "$GITHUB_STEP_SUMMARY"
-          done
+              --pattern "pages-${SLUG}-*" \
+              --dir "${TMP}"
 
-      - name: Generate manifests for all presets
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
-          REPO: ${{ github.repository }}
-        run: |
-          SEMVER="${VERSION}"
-          BASE_URL="https://github.com/${REPO}/releases/download/${VERSION}"
+            # Strip the "pages-${SLUG}-" prefix to restore original filenames so
+            # the manifest.json relative paths produced by esphome/build-action
+            # resolve correctly when served from Pages
+            for f in "${TMP}/pages-${SLUG}-"*; do
+              fname="${f#${TMP}/pages-${SLUG}-}"
+              cp "$f" "${DIR}/${fname}"
+            done
 
-          declare -A PRESET_LABELS=(
-            ["e"]="Électrolyseur"
-            ["er"]="Électrolyseur + Redox"
-            ["ep"]="Électrolyseur + pH"
-            ["erp"]="Électrolyseur + Redox + pH"
-            ["be"]="Booster + Électrolyseur"
-            ["ber"]="Booster + Électrolyseur + Redox"
-            ["bep"]="Booster + Électrolyseur + pH"
-            ["berp"]="Booster + Électrolyseur + Redox + pH"
-          )
-
-          for SLUG in e er ep erp be ber bep berp; do
-            PRESET="frangipool-${SLUG}"
-            LABEL="${PRESET_LABELS[$SLUG]}"
-            DIR="docs/install/${SLUG}"
-
-            # `parts.path` est relatif → servi par Pages (même origine, pas de CORS).
-            # `ota.path` est absolu → téléchargé par l'ESP lui-même, sans contrainte CORS navigateur.
-            cat > "${DIR}/manifest.json" <<JSON
-          {
-            "name": "FrangiPool — ${LABEL}",
-            "version": "${SEMVER}",
-            "home_assistant_domain": "esphome",
-            "new_install_prompt_erase": false,
-            "funding_url": "https://github.com/gaetanars/FrangiPool",
-            "builds": [
-              {
-                "chipFamily": "ESP32",
-                "parts": [
-                  {
-                    "path": "${PRESET}-v${SEMVER}.factory.bin",
-                    "offset": 0
-                  }
-                ],
-                "ota": {
-                  "path": "${BASE_URL}/${PRESET}-v${SEMVER}.ota.bin"
-                }
-              }
-            ]
-          }
-          JSON
-            echo "- Generated manifest for ${PRESET} → ${DIR}/manifest.json" >> "$GITHUB_STEP_SUMMARY"
+            echo "- Prepared web installer assets for frangipool-${SLUG}" >> "$GITHUB_STEP_SUMMARY"
           done
 
       - name: Setup Pages

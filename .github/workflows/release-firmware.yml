@@ -103,16 +103,28 @@ jobs:
         with:
           yaml-file: ${{ matrix.preset }}.yaml
           version: "2026.4.1"
+          complete-manifest: true
 
-      - name: Collect firmware binaries
+      - name: Collect firmware files
         run: |
           VERSION="${{ needs.preflight.outputs.version }}"
           PRESET="${{ matrix.preset }}"
-          BUILD_DIR=".esphome/build/frangipool/.pioenvs/frangipool"
+          SLUG="${PRESET#frangipool-}"
+          BUILD_PATH="${{ steps.esphome-build.outputs.build-path }}"
           mkdir -p firmware
-          cp "${BUILD_DIR}/firmware.factory.bin" "firmware/${PRESET}-v${VERSION}.factory.bin"
-          cp "${BUILD_DIR}/firmware.ota.bin"     "firmware/${PRESET}-v${VERSION}.ota.bin"
-          echo "- Built ${PRESET}-v${VERSION}.factory.bin + .ota.bin" >> "$GITHUB_STEP_SUMMARY"
+
+          # Versioned release assets for direct download
+          cp "${BUILD_PATH}/"*.factory.bin "firmware/${PRESET}-v${VERSION}.factory.bin"
+          cp "${BUILD_PATH}/"*.ota.bin     "firmware/${PRESET}-v${VERSION}.ota.bin"
+
+          # Pages assets: all build-action output files, slug-prefixed to avoid
+          # collision across presets (original filenames preserved so the
+          # manifest.json relative paths remain valid after de-prefixing in deploy-pages)
+          for f in "${BUILD_PATH}/"*; do
+            cp "$f" "firmware/pages-${SLUG}-$(basename "$f")"
+          done
+
+          echo "- Built ${PRESET}-v${VERSION}.factory.bin + .ota.bin + pages assets" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload firmware artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
@@ -180,7 +192,7 @@ jobs:
           tag: ${{ needs.preflight.outputs.version }}
           name: ${{ needs.preflight.outputs.version }}
           body: ${{ steps.release_notes.outputs.body }}
-          artifacts: "firmware/*.bin"
+          artifacts: "firmware/*"
           immutableCreate: true
           makeLatest: legacy
           token: ${{ secrets.GITHUB_TOKEN }}
