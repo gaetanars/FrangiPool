@@ -1,6 +1,4 @@
 substitutions:
-  local_temp_address: "0x0000000000000000"  # Remplacer par l'adresse de votre sonde locale (voir logs ESPHome au démarrage)
-  temp_address: "0x0000000000000000"  # Remplacer par l'adresse de votre sonde canalisation
   preset_slug: "ber"
 
 esphome:
