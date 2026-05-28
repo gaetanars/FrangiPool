@@ -173,7 +173,7 @@ jobs:
       - name: Log CHANGELOG commit to step summary
         run: echo "- CHANGELOG committed to main for ${{ github.ref_name }}" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Create or update GitHub Release
+      - name: Create GitHub Release (draft)
         uses: ncipollo/release-action@339a81892b84b4eeb0f6e744e4574d79d0d9b8dd  # v1.21.0
         with:
           allowUpdates: true
@@ -181,12 +181,21 @@ jobs:
           name: ${{ github.ref_name }}
           body: ${{ steps.release_notes.outputs.body }}
           token: ${{ secrets.GITHUB_TOKEN }}
+          draft: true
 
-      - name: Upload firmware binaries to release
+      - name: Upload firmware binaries to draft release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release upload "${{ github.ref_name }}" firmware/*.bin \
             --repo "${{ github.repository }}"
           BIN_COUNT=$(ls firmware/*.bin 2>/dev/null | wc -l)
-          echo "- GitHub Release ${{ github.ref_name }} created with ${BIN_COUNT} firmware binaries" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Uploaded ${BIN_COUNT} firmware binaries to draft ${{ github.ref_name }}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release edit "${{ github.ref_name }}" --draft=false \
+            --repo "${{ github.repository }}"
+          echo "- GitHub Release ${{ github.ref_name }} published" >> "$GITHUB_STEP_SUMMARY"

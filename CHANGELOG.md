@@ -87,5 +87,4 @@ Première release du PCB — carte 5V pour ESP32 avec ADS1115, bus 1-Wire, conne
 Imported from [frangipool/pcb](https://github.com/frangipool/pcb) @ `cfd2e9f` (voir aussi [pcb/CHANGELOG.md](pcb/CHANGELOG.md) pour l'archive originale).
 [v0.2.0]: https://github.com/gaetanars/FrangiPool/compare/v0.1.0...v0.2.0
 [v0.3.0]: https://github.com/gaetanars/FrangiPool/compare/v0.2.0...v0.3.0
-[0.4.0]: https://github.com/gaetanars/FrangiPool/compare/0.3.0...0.4.0
 [0.4.1]: https://github.com/gaetanars/FrangiPool/compare/0.3.0...0.4.1
