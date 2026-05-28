@@ -581,6 +581,16 @@
       <strong>Clé API</strong> — Après le flash v0.2, Home Assistant verra le device comme <code>unavailable</code>. Supprimez l'intégration ESPHome dans HA et ré-adoptez. Les <code>unique_id</code> sont conservés — vos dashboards restent fonctionnels.
     </div>
 
+    <h3>Renommer le device dans Home Assistant</h3>
+    <p>Par défaut, <code>name_add_mac_suffix: true</code> donne au device un nom unique <code>frangipool-XXXX</code> (XXXX = 4 derniers octets du MAC). Les entity IDs HA prennent la forme <code>sensor.frangipool_xxxx_*</code>.</p>
+    <p>Pour revenir à des IDs courts (<code>sensor.frangipool_*</code>), renommez le device dans HA :</p>
+    <ol>
+      <li>Paramètres → Appareils &amp; Services → ESPHome → cliquez sur le device <code>frangipool-XXXX</code></li>
+      <li>Icône crayon → changez le nom en <code>frangipool</code> → Enregistrer</li>
+      <li>HA régénère automatiquement tous les entity IDs.</li>
+    </ol>
+    <div class="callout">Le dashboard Lovelace <code>homeassistant/dashboard/frangipool.yaml</code> utilise le préfixe <code>frangipool_*</code> — il fonctionne directement après ce renommage.</div>
+
     <h3>Migration depuis un self-compiler v1.x</h3>
     <p>Si vous compiliez depuis les sources avec un <code>secrets.yaml</code> local, les <code>!secret wifi_ssid</code>, <code>!secret api_encryption_key</code> ont été supprimés de <code>packages/base.yaml</code>. Pour conserver vos credentials custom, ajoutez-les dans le bloc <code>substitutions:</code> de votre preset local — ils prennent priorité sur les packages.</p>
   </div>

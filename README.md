@@ -96,7 +96,7 @@ Si tu compilais depuis les sources avec un `secrets.yaml` local, les `!secret wi
       password: "ton-ota-password"
   ```
 
-- **`name_add_mac_suffix`** a été supprimé : le nom du device est à nouveau `frangipool` (sans suffixe MAC). Les entity IDs Home Assistant redeviennent `sensor.frangipool_*`. Si tu avais renommé les entités avec le suffixe `_xxxx_`, remets-les à leur nom d'origine ou mets à jour le dashboard Lovelace.
+- **`name_add_mac_suffix: true`** est maintenant activé : le nom du device devient `frangipool-XXXX`. Les entity IDs Home Assistant changent de `sensor.frangipool_*` à `sensor.frangipool_xxxx_*`. Renomme les entités dans HA ou mets à jour le dashboard Lovelace.
 
 ## Filtration autonome
 
