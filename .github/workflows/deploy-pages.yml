@@ -38,7 +38,7 @@ jobs:
           if [ -n "${{ github.event.inputs.version }}" ]; then
             VERSION="${{ github.event.inputs.version }}"
           elif [ "${{ github.event_name }}" = "workflow_run" ]; then
-            VERSION="${{ github.event.workflow_run.head_branch }}"
+            VERSION=$(gh release list --repo "${{ github.repository }}" --limit 1 --json tagName -q '.[0].tagName')
           else
             VERSION=$(gh release list --repo "${{ github.repository }}" --limit 1 --json tagName -q '.[0].tagName')
           fi
