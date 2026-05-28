@@ -328,26 +328,26 @@ Firmware et PCB ont des cycles de vie indépendants. Deux workflows tag-triggere
 
 Les deux workflows partagent un `concurrency:` group `release-main` — un push combiné `git push origin main v0.2.0 pcb-0.1.1` sérialise proprement les deux auto-commits `main` sans fenêtre de race.
 
-### Couper une release firmware (`v*`)
+### Couper une release firmware
 
 1. Se placer sur `main` à jour : `git checkout main && git pull`.
-2. Vérifier les commits [Conventional Commits](https://www.conventionalcommits.org/) depuis le dernier tag `v*.*.*`.
+2. Vérifier les commits [Conventional Commits](https://www.conventionalcommits.org/) depuis le dernier tag `*.*.*`.
 3. **Toujours tagger un commit déjà sur `main`** — jamais depuis une feat branch ou un état détaché. La workflow refuse les tags pointant sur un commit absent de `origin/main`.
-4. Pousser le tag : `git tag vX.Y.Z && git push origin main vX.Y.Z`.
+4. Pousser le tag : `git tag X.Y.Z && git push origin main X.Y.Z`.
 5. Vérifier dans l'onglet Actions que `release-firmware.yml` est `success` (compilation + release), puis que `deploy-pages.yml` termine le déploiement. La [page d'installation](https://gaetanars.github.io/FrangiPool) pointe automatiquement vers la nouvelle version.
 
-Le tag doit matcher la regex `v[0-9]+.[0-9]+.[0-9]+` (pas de suffixes `-rc`, `-test`, etc.).
+Le tag doit matcher la regex `[0-9]+.[0-9]+.[0-9]+` (pas de suffixes `-rc`, `-test`, etc.).
 
 **Retag forward-looking** (corriger un tag qui vient d'être publié) : supprimer d'abord la release GitHub, puis retirer le tag local et remote, puis re-tagger.
 
 ```bash
-gh release delete vX.Y.Z --yes
-git tag -d vX.Y.Z
-git push origin :refs/tags/vX.Y.Z
+gh release delete X.Y.Z --yes
+git tag -d X.Y.Z
+git push origin :refs/tags/X.Y.Z
 # corriger, puis retagger via l'étape 4 ci-dessus
 ```
 
-Le retag des tags historiques `v0.0.1` et `v0.1.0` est explicitement hors-scope — ils restent intouchés.
+Le retag des tags historiques `v0.0.1`, `v0.1.0`, `v0.2.0` et `v0.3.0` est explicitement hors-scope — ils restent intouchés.
 
 ### Couper une release PCB (`pcb-*`)
 
@@ -406,4 +406,4 @@ packages:
   redox_electrolyser: github://gaetanars/FrangiPool/packages/redox_electrolyser.yaml@main
 ```
 
-Tous les packages sont téléchargés directement depuis GitHub au moment de la compilation. Pour épingler une version spécifique, remplacer `@main` par un tag (ex : `@v0.2.0`).
+Tous les packages sont téléchargés directement depuis GitHub au moment de la compilation. Pour épingler une version spécifique, remplacer `@main` par un tag (ex : `@0.4.0`).

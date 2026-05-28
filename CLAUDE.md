@@ -128,7 +128,7 @@ Default to **dropping dashboard references** rather than re-adding firmware enti
 The guards in the release workflows are intentional — do not remove them:
 
 - **Tag on `origin/main` only** — the refname-exact check (`grep -Fxq 'refs/remotes/origin/main'`) prevents releases from feat branches. Always tag a commit already on `main`.
-- **Idempotence guard** — `gh release view` before creating prevents silent overwrites on force-retag. To retag: `gh release delete vX.Y.Z --yes && git tag -d vX.Y.Z && git push origin :refs/tags/vX.Y.Z`, then re-tag.
+- **Idempotence guard** — `gh release view` before creating prevents silent overwrites on force-retag. To retag: `gh release delete X.Y.Z --yes && git tag -d X.Y.Z && git push origin :refs/tags/X.Y.Z`, then re-tag.
 - **Prev-tag by name, not position** — `grep -v -Fx "$current_tag"` skips the current tag by name so forward-looking retags compute the correct diff window.
 - **`pcb-0.1.0` is a seed anchor** — never delete or move it. It is the base for `git tag --list 'pcb-*'` prev-tag computation. The workflow skips it via an explicit guard.
 - **Shared concurrency group `release-main`** — both firmware and PCB workflows share it to prevent CHANGELOG auto-commit races on simultaneous tag pushes.

@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version à déployer (ex: v0.3.0). Laisser vide pour utiliser le dernier release.'
+        description: 'Version à déployer (ex: 0.3.0). Laisser vide pour utiliser le dernier release.'
         required: false
 
 permissions:
@@ -65,7 +65,7 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
           REPO: ${{ github.repository }}
         run: |
-          SEMVER="${VERSION#v}"
+          SEMVER="${VERSION}"
           BASE_URL="https://github.com/${REPO}/releases/download/${VERSION}"
 
           declare -A PRESET_LABELS=(
