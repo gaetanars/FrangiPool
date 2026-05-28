@@ -27,6 +27,8 @@ api:
         - globals.set:
             id: g_dallas_swapped
             value: !lambda 'return !id(g_dallas_swapped);'
+        - component.update: ts_dallas_local
+        - component.update: ts_dallas_pipe
 
 ota:
   - platform: http_request
@@ -176,6 +178,23 @@ sensor:
     name: RSSI
     update_interval: 60s
     entity_category: diagnostic
+
+text_sensor:
+  - platform: template
+    name: Sonde Température Local
+    id: ts_dallas_local
+    entity_category: diagnostic
+    icon: mdi:thermometer
+    lambda: |-
+      return id(g_dallas_swapped) ? std::string("Sonde 1") : std::string("Sonde 0");
+
+  - platform: template
+    name: Sonde Température Canalisation
+    id: ts_dallas_pipe
+    entity_category: diagnostic
+    icon: mdi:thermometer
+    lambda: |-
+      return id(g_dallas_swapped) ? std::string("Sonde 0") : std::string("Sonde 1");
 
 binary_sensor:
   - platform: template
