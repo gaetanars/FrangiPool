@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.2] - 2026-05-28
+### :sparkles: New Features
+- [`09c6ee2`](https://github.com/gaetanars/FrangiPool/commit/09c6ee299d3eecfbf683b3a6253c7225d9891a45) - **dallas**: replace address substitutions with index-based swap action *(commit by [@gaetanars](https://github.com/gaetanars))*
+- [`b8caf42`](https://github.com/gaetanars/FrangiPool/commit/b8caf42faed4347c64c8c1bb3849d5b1a63016d6) - **ci**: add workflow_dispatch to release-firmware, extract version from preflight *(commit by [@gaetanars](https://github.com/gaetanars))*
+
+### :bug: Bug Fixes
+- [`41e3b72`](https://github.com/gaetanars/FrangiPool/commit/41e3b722d8c975e9f70f6be9160705e76859f85d) - use device name for AP SSID *(commit by [@gaetanars](https://github.com/gaetanars))*
+- [`0a2ce25`](https://github.com/gaetanars/FrangiPool/commit/0a2ce25aaab91347fa4b326cd5d4c84474c22ed2) - **ci**: serve factory binaries from Pages to fix CORS on web installer *(commit by [@gaetanars](https://github.com/gaetanars))*
+- [`b977b79`](https://github.com/gaetanars/FrangiPool/commit/b977b79385bd5d04bbd66e660ad6c703d8a2378d) - **ci**: restore hardcoded BUILD_DIR for firmware binary collection *(commit by [@gaetanars](https://github.com/gaetanars))*
+- [`f4d6372`](https://github.com/gaetanars/FrangiPool/commit/f4d6372f949e8f075a1039f77436ee79f991cf31) - **ci**: upload firmware via gh cli, fix deploy-pages version resolution *(commit by [@gaetanars](https://github.com/gaetanars))*
+- [`8336815`](https://github.com/gaetanars/FrangiPool/commit/8336815e9511e5973aec68e3382bbaa04076ca25) - **ci**: use draft→upload→publish pattern for immutable releases *(commit by [@gaetanars](https://github.com/gaetanars))*
+- [`3b9e656`](https://github.com/gaetanars/FrangiPool/commit/3b9e656cb485fd153fb66dcb3909b8f19656fe89) - **ci**: remove broken preset table from release body *(commit by [@gaetanars](https://github.com/gaetanars))*
+- [`8119411`](https://github.com/gaetanars/FrangiPool/commit/8119411b2178895a474ae30d62c44a4c6e3be335) - **ci**: use ncipollo immutableCreate for immutable-safe release *(commit by [@gaetanars](https://github.com/gaetanars))*
+
+### :memo: Documentation Changes
+- [`1ac08fb`](https://github.com/gaetanars/FrangiPool/commit/1ac08fb9f167d62aeb5f83c36a998b9c9e631c00) - update temperature section to reflect index-based Dallas probes *(commit by [@gaetanars](https://github.com/gaetanars))*
+
+
 ## [0.4.1] - 2026-05-28
 ### :sparkles: New Features
 - [`09c6ee2`](https://github.com/gaetanars/FrangiPool/commit/09c6ee299d3eecfbf683b3a6253c7225d9891a45) - **dallas**: replace address substitutions with index-based swap action *(commit by [@gaetanars](https://github.com/gaetanars))*
@@ -88,3 +106,4 @@ Imported from [frangipool/pcb](https://github.com/frangipool/pcb) @ `cfd2e9f` (v
 [v0.2.0]: https://github.com/gaetanars/FrangiPool/compare/v0.1.0...v0.2.0
 [v0.3.0]: https://github.com/gaetanars/FrangiPool/compare/v0.2.0...v0.3.0
 [0.4.1]: https://github.com/gaetanars/FrangiPool/compare/0.3.0...0.4.1
+[0.4.2]: https://github.com/gaetanars/FrangiPool/compare/0.3.0...0.4.2
