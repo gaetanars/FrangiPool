@@ -3,8 +3,8 @@ substitutions:
 
 esphome:
   project:
-    name: frangipool.bep
-    version: "0.2.0"
+    name: gaetanars.frangipool_booster_electrolyser_ph
+    version: dev
 
 dashboard_import:
   package_import_url: github://gaetanars/FrangiPool/frangipool-bep.yaml@main

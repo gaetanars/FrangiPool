@@ -75,28 +75,26 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
 
-      - name: Install ESPHome
-        run: pip install "esphome==2026.3.3"  # pin to tested version — update when upgrading locally
-
-      - name: Prepare preset for compilation
+      - name: Patch version
         run: |
           VERSION="${{ github.ref_name }}"
-          VERSION="${VERSION#v}"
-          sed -i "s/version: \"[^\"]*\"/version: \"${VERSION}\"/" ${{ matrix.preset }}.yaml
+          sed -i "s/version: dev/version: ${VERSION#v}/" ${{ matrix.preset }}.yaml
 
-      - name: Compile ${{ matrix.preset }}
-        run: esphome compile ${{ matrix.preset }}.yaml
+      - name: Build ${{ matrix.preset }}
+        id: esphome-build
+        uses: esphome/build-action@f0a331817f5535854a10a42621b6a8b7ebe95c4c  # v7.2.0
+        with:
+          yaml-file: ${{ matrix.preset }}.yaml
+          version: "2026.4.1"
 
       - name: Collect firmware binaries
         run: |
           VERSION="${{ github.ref_name }}"
           VERSION="${VERSION#v}"
           PRESET="${{ matrix.preset }}"
-          # ESPHome names the build dir after esphome.name (= 'frangipool' from base.yaml substitution)
-          BUILD_DIR=".esphome/build/frangipool/.pioenvs/frangipool"
           mkdir -p firmware
-          cp "${BUILD_DIR}/firmware.factory.bin" "firmware/${PRESET}-v${VERSION}.factory.bin"
-          cp "${BUILD_DIR}/firmware.ota.bin"     "firmware/${PRESET}-v${VERSION}.ota.bin"
+          cp "${{ steps.esphome-build.outputs.name }}/firmware.factory.bin" "firmware/${PRESET}-v${VERSION}.factory.bin"
+          cp "${{ steps.esphome-build.outputs.name }}/firmware.ota.bin"     "firmware/${PRESET}-v${VERSION}.ota.bin"
           echo "- Built ${PRESET}-v${VERSION}.factory.bin + .ota.bin" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload firmware artifacts

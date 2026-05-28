@@ -3,8 +3,8 @@ substitutions:
 
 esphome:
   project:
-    name: frangipool.erp
-    version: "0.2.0"
+    name: gaetanars.frangipool_electrolyser_redox_ph
+    version: dev
 
 dashboard_import:
   package_import_url: github://gaetanars/FrangiPool/frangipool-erp.yaml@main
