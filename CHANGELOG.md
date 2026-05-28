@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-05-28
+### :sparkles: New Features
+- [`09c6ee2`](https://github.com/gaetanars/FrangiPool/commit/09c6ee299d3eecfbf683b3a6253c7225d9891a45) - **dallas**: replace address substitutions with index-based swap action *(commit by [@gaetanars](https://github.com/gaetanars))*
+
+### :bug: Bug Fixes
+- [`41e3b72`](https://github.com/gaetanars/FrangiPool/commit/41e3b722d8c975e9f70f6be9160705e76859f85d) - use device name for AP SSID *(commit by [@gaetanars](https://github.com/gaetanars))*
+- [`0a2ce25`](https://github.com/gaetanars/FrangiPool/commit/0a2ce25aaab91347fa4b326cd5d4c84474c22ed2) - **ci**: serve factory binaries from Pages to fix CORS on web installer *(commit by [@gaetanars](https://github.com/gaetanars))*
+- [`b977b79`](https://github.com/gaetanars/FrangiPool/commit/b977b79385bd5d04bbd66e660ad6c703d8a2378d) - **ci**: restore hardcoded BUILD_DIR for firmware binary collection *(commit by [@gaetanars](https://github.com/gaetanars))*
+
+### :memo: Documentation Changes
+- [`1ac08fb`](https://github.com/gaetanars/FrangiPool/commit/1ac08fb9f167d62aeb5f83c36a998b9c9e631c00) - update temperature section to reflect index-based Dallas probes *(commit by [@gaetanars](https://github.com/gaetanars))*
+
+
 ## [v0.3.0] - 2026-05-27
 ### :sparkles: New Features
 - [`fd06856`](https://github.com/gaetanars/FrangiPool/commit/fd06856ad6d78880538e687ba4a1343598f8ff56) - **base**: remove secrets dependency for zero-config distribution *(commit by [@gaetanars](https://github.com/gaetanars))*
@@ -73,3 +86,4 @@ Première release du PCB — carte 5V pour ESP32 avec ADS1115, bus 1-Wire, conne
 Imported from [frangipool/pcb](https://github.com/frangipool/pcb) @ `cfd2e9f` (voir aussi [pcb/CHANGELOG.md](pcb/CHANGELOG.md) pour l'archive originale).
 [v0.2.0]: https://github.com/gaetanars/FrangiPool/compare/v0.1.0...v0.2.0
 [v0.3.0]: https://github.com/gaetanars/FrangiPool/compare/v0.2.0...v0.3.0
+[0.4.0]: https://github.com/gaetanars/FrangiPool/compare/0.3.0...0.4.0
