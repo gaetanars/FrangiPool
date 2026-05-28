@@ -9,7 +9,6 @@ esphome:
 
 wifi:
   ap:
-    ssid: frangipool
 
 improv_serial:
 
