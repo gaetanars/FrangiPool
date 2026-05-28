@@ -110,17 +110,17 @@ jobs:
           VERSION="${{ needs.preflight.outputs.version }}"
           PRESET="${{ matrix.preset }}"
           SLUG="${PRESET#frangipool-}"
-          BUILD_PATH="${{ steps.esphome-build.outputs.build-path }}"
+          BUILD_PATH="${{ steps.esphome-build.outputs.name }}"
           mkdir -p firmware
 
           # Versioned release assets for direct download
           cp "${BUILD_PATH}/"*.factory.bin "firmware/${PRESET}-v${VERSION}.factory.bin"
           cp "${BUILD_PATH}/"*.ota.bin     "firmware/${PRESET}-v${VERSION}.ota.bin"
 
-          # Pages assets: all build-action output files, slug-prefixed to avoid
-          # collision across presets (original filenames preserved so the
-          # manifest.json relative paths remain valid after de-prefixing in deploy-pages)
-          for f in "${BUILD_PATH}/"*; do
+          # Pages assets: manifest + bin files only (no .elf), slug-prefixed to avoid
+          # collision across presets. Original filenames preserved so the manifest.json
+          # relative paths stay valid after de-prefixing in deploy-pages.
+          for f in "${BUILD_PATH}/manifest.json" "${BUILD_PATH}/"*.factory.bin "${BUILD_PATH}/"*.ota.bin; do
             cp "$f" "firmware/pages-${SLUG}-$(basename "$f")"
           done
 
