@@ -1,0 +1,37 @@
+name: Build
+
+on:
+  push:
+    branches: [develop, main]
+    paths-ignore:
+      - 'pcb/**'
+      - 'CHANGELOG.md'
+      - 'docs/**'
+      - 'README.md'
+  pull_request:
+    paths-ignore:
+      - 'pcb/**'
+      - 'CHANGELOG.md'
+      - 'docs/**'
+      - 'README.md'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build firmware (berp)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+
+      - name: Build frangipool-berp
+        uses: esphome/build-action@f0a331817f5535854a10a42621b6a8b7ebe95c4c  # v7.2.0
+        with:
+          yaml-file: frangipool-berp.yaml
+          version: "2026.4.1"

@@ -2,7 +2,7 @@
 
 Orchestre un release firmware ou PCB propre : vérification de l'état git, suggestion de version, aperçu du changelog, tag + push.
 
-**Usage** : `/release [firmware|pcb] [vX.Y.Z|pcb-X.Y.Z]`
+**Usage** : `/release [firmware|pcb] [X.Y.Z|pcb-X.Y.Z]`
 
 Arguments optionnels :
 - `firmware` ou `pcb` — composant à releaser (demandé si absent)
@@ -30,13 +30,13 @@ Si l'une échoue → stopper, expliquer, proposer le correctif.
 ### 2. Composant à releaser
 
 Si `$ARGUMENTS` contient `firmware` ou `pcb`, utiliser directement.  
-Sinon demander : **firmware** (tag `v*.*.*`) ou **pcb** (tag `pcb-*.*.*`) ?
+Sinon demander : **firmware** (tag `*.*.*`) ou **pcb** (tag `pcb-*.*.*`) ?
 
 ### 3. Dernier tag et commits en attente
 
 **Firmware :**
 ```bash
-rtk git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -1
+rtk git tag --list '[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -1
 ```
 
 **PCB :**
@@ -60,7 +60,7 @@ Analyser les sujets de commits depuis le dernier tag :
 - Contient `feat:` ou `feat(...):` → **MINOR**
 - Sinon → **PATCH**
 
-Appliquer au numéro de version du dernier tag (retirer le préfixe `v` ou `pcb-`).
+Appliquer au numéro de version du dernier tag (retirer le préfixe `pcb-` si applicable).
 
 ### 5. Aperçu du changelog
 
@@ -81,7 +81,7 @@ Grouper par type en format Keep a Changelog :
 
 Proposer :
 ```
-Version suggérée : v<X.Y.Z>   (ou pcb-<X.Y.Z>)
+Version suggérée : <X.Y.Z>   (ou pcb-<X.Y.Z>)
 Commits inclus   : N commits
 ```
 
@@ -93,8 +93,8 @@ Demander explicitement : **Confirmes-tu ce tag et ce push ?**
 ### 7. Tag et push
 
 ```bash
-rtk git tag v<X.Y.Z>
-rtk git push origin main v<X.Y.Z>
+rtk git tag <X.Y.Z>
+rtk git push origin main <X.Y.Z>
 ```
 
 Après push, indiquer à l'utilisateur :

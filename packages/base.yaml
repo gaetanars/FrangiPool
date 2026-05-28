@@ -1,6 +1,4 @@
 substitutions:
-  local_temp_address: "0x0000000000000000"
-  temp_address: "0x0000000000000000"
   preset_slug: "erp"  # Overridden by each preset — used to build the OTA manifest URL
 
 esphome:
@@ -11,7 +9,6 @@ esphome:
 
 wifi:
   ap:
-    ssid: frangipool
 
 improv_serial:
 
@@ -24,6 +21,12 @@ logger:
   level: INFO
 
 api:
+  actions:
+    - action: swap_dallas_probes
+      then:
+        - globals.set:
+            id: g_dallas_swapped
+            value: !lambda 'return !id(g_dallas_swapped);'
 
 ota:
   - platform: http_request
@@ -56,6 +59,10 @@ globals:
   - id: g_store_pool_temp
     type: float
     restore_value: True
+  - id: g_dallas_swapped
+    type: bool
+    restore_value: true
+    initial_value: 'false'
 
 number:
   - platform: template
@@ -85,34 +92,56 @@ number:
 
 sensor:
   - platform: dallas_temp
-    address: ${local_temp_address}
-    name: Température Local
-    id: local_temp
-    update_interval: 10s
-    accuracy_decimals: 1
-    filters:
-      - sliding_window_moving_average:
-          window_size: 18
-          send_every: 6
-          send_first_at: 6
-
-  - platform: dallas_temp
-    address: ${temp_address}
-    name: Température Canalisation
-    accuracy_decimals: 1
-    update_interval: 10s
-    id: pipe_temp
-    filters:
-      - sliding_window_moving_average:
-          window_size: 18
-          send_every: 6
-          send_first_at: 6
-
-  - platform: dallas_temp
-    address: ${temp_address}
-    id: pipe_temp_raw
+    index: 0
+    id: dallas_raw_0
     internal: true
     update_interval: 10s
+
+  - platform: dallas_temp
+    index: 1
+    id: dallas_raw_1
+    internal: true
+    update_interval: 10s
+
+  - platform: template
+    name: Température Local
+    id: local_temp
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 1
+    update_interval: 10s
+    filters:
+      - sliding_window_moving_average:
+          window_size: 18
+          send_every: 6
+          send_first_at: 6
+    lambda: |-
+      return id(g_dallas_swapped) ? id(dallas_raw_1).state : id(dallas_raw_0).state;
+
+  - platform: template
+    name: Température Canalisation
+    id: pipe_temp
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 1
+    update_interval: 10s
+    filters:
+      - sliding_window_moving_average:
+          window_size: 18
+          send_every: 6
+          send_first_at: 6
+    lambda: |-
+      return id(g_dallas_swapped) ? id(dallas_raw_0).state : id(dallas_raw_1).state;
+
+  - platform: template
+    id: pipe_temp_raw
+    internal: true
+    unit_of_measurement: "°C"
+    update_interval: 10s
+    lambda: |-
+      return id(g_dallas_swapped) ? id(dallas_raw_0).state : id(dallas_raw_1).state;
 
   - platform: template
     name: Température Piscine

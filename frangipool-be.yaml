@@ -1,12 +1,10 @@
 substitutions:
-  local_temp_address: "0x0000000000000000"  # Remplacer par l'adresse de votre sonde locale (voir logs ESPHome au démarrage)
-  temp_address: "0x0000000000000000"  # Remplacer par l'adresse de votre sonde canalisation
   preset_slug: "be"
 
 esphome:
   project:
-    name: frangipool.be
-    version: "0.2.0"
+    name: gaetanars.frangipool_booster_electrolyser
+    version: dev
 
 dashboard_import:
   package_import_url: github://gaetanars/FrangiPool/frangipool-be.yaml@main

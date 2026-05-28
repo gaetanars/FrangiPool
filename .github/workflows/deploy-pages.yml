@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version à déployer (ex: v0.3.0). Laisser vide pour utiliser le dernier release.'
+        description: 'Version à déployer (ex: 0.3.0). Laisser vide pour utiliser le dernier release.'
         required: false
 
 permissions:
@@ -45,12 +45,27 @@ jobs:
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "- Deploying manifests for ${VERSION}" >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Download firmware binaries for all presets
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          for SLUG in e er ep erp be ber bep berp; do
+            DIR="docs/install/${SLUG}"
+            mkdir -p "${DIR}"
+            gh release download "$VERSION" \
+              --repo "${{ github.repository }}" \
+              --pattern "frangipool-${SLUG}-*.factory.bin" \
+              --dir "${DIR}"
+            echo "- Downloaded frangipool-${SLUG} factory binary" >> "$GITHUB_STEP_SUMMARY"
+          done
+
       - name: Generate manifests for all presets
         env:
           VERSION: ${{ steps.version.outputs.version }}
           REPO: ${{ github.repository }}
         run: |
-          SEMVER="${VERSION#v}"
+          SEMVER="${VERSION}"
           BASE_URL="https://github.com/${REPO}/releases/download/${VERSION}"
 
           declare -A PRESET_LABELS=(
@@ -68,10 +83,9 @@ jobs:
             PRESET="frangipool-${SLUG}"
             LABEL="${PRESET_LABELS[$SLUG]}"
             DIR="docs/install/${SLUG}"
-            mkdir -p "${DIR}"
 
-            # Combined manifest : `parts` pour ESP Web Tools (flash initial via navigateur)
-            # + `ota` pour le composant update: ESPHome (mise à jour depuis l'ESP lui-même).
+            # `parts.path` est relatif → servi par Pages (même origine, pas de CORS).
+            # `ota.path` est absolu → téléchargé par l'ESP lui-même, sans contrainte CORS navigateur.
             cat > "${DIR}/manifest.json" <<JSON
           {
             "name": "FrangiPool — ${LABEL}",
@@ -84,7 +98,7 @@ jobs:
                 "chipFamily": "ESP32",
                 "parts": [
                   {
-                    "path": "${BASE_URL}/${PRESET}-v${SEMVER}.factory.bin",
+                    "path": "${PRESET}-v${SEMVER}.factory.bin",
                     "offset": 0
                   }
                 ],

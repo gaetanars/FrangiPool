@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:gist.githubusercontent.com)",
+      "WebFetch(domain:docs.esphome.io)",
+      "WebFetch(domain:web.esphome.io)",
+      "WebFetch(domain:esphome.github.io)",
+      "WebFetch(domain:api.github.com)"
+    ]
+  }
+}

@@ -421,8 +421,10 @@
 
     <p style="margin-top:1rem;font-size:.85rem"><strong>Auto-régulation</strong> : contrôle automatique de l'électrolyseur selon les seuils Redox (nécessite E + R).</p>
 
-    <h3>Substitutions Dallas</h3>
-    <p>Chaque preset définit deux substitutions pour les sondes de température. Flash avec les adresses par défaut <code>0x0000000000000000</code>, ouvrez les logs ESPHome — le scan 1-Wire affiche les adresses découvertes au démarrage, puis renseignez-les.</p>
+    <h3>Sondes de température</h3>
+    <p>Deux sondes Dallas sont connectées sur le bus 1-Wire (GPIO23). L'ESP les détecte automatiquement par index — <strong>aucune adresse à configurer</strong>. L'index 0 alimente <strong>Température Local</strong> (ambiance locale), l'index 1 alimente <strong>Température Canalisation</strong> (tuyau retour).</p>
+    <p>Si les deux sondes sont physiquement inversées sur le câble, utilisez l'action <strong>swap_dallas_probes</strong> depuis Home Assistant pour échanger leurs affectations sans retoucher ni recompiler le firmware. La préférence est persistée après reboot.</p>
+    <p>La <strong>Température Piscine</strong> est une valeur <em>échantillonnée</em> : elle n'est mise à jour que lorsque la pompe tourne depuis au moins le délai de mesure (réglable, défaut 20 min), afin d'éviter de capturer la température de l'eau stagnante dans les tuyaux.</p>
   </div>
 </section>
 
@@ -468,11 +470,13 @@
         <tr><td>Coefficient Filtration</td><td>100 %</td><td>Multiplicateur global (50–150 %) sans changer de mode</td></tr>
         <tr><td>Durée Hiver Min</td><td>3 h</td><td>Durée journalière en mode Hiver quand T &lt; 10 °C</td></tr>
         <tr><td>Diviseur Hiver</td><td>3</td><td>Durée = T ÷ diviseur quand T ≥ 10 °C en mode Hiver</td></tr>
+        <tr><td>Consigne Antigel</td><td>0 °C</td><td>Seuil de déclenchement hors-gel (hystérésis −1 °C en dessous)</td></tr>
+        <tr><td>Délai mesures piscine</td><td>20 min</td><td>Durée de pompe minimum avant mise à jour de <em>Température Piscine</em></td></tr>
       </tbody>
     </table>
 
     <h3>Antigel</h3>
-    <p>Indépendant du planning. Si la température du tuyau passe sous le seuil antigel, la pompe démarre immédiatement quel que soit le mode ou l'heure.</p>
+    <p>Indépendant du planning. Si la <strong>Température Canalisation</strong> passe sous la consigne antigel (défaut 0 °C, réglable), la pompe démarre immédiatement quel que soit le mode ou l'heure. Un hystérésis de 1 °C évite les cyclages rapides. Une notification Home Assistant est envoyée à l'activation et à la désactivation.</p>
 
     <h3>Mode forcé</h3>
     <p>Trois boutons permettent de forcer la pompe pendant une durée fixe (2 h, 6 h, 24 h), prioritaires sur tout — y compris le mode Off. À expiration, retour automatique à la planification.</p>

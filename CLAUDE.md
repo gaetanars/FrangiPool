@@ -8,6 +8,10 @@ ESPHome firmware-as-configuration for an ESP32 that autonomously runs a salt-poo
 
 `CLAUDE.md` itself is gitignored — it is a local agent guide, not a project artifact. Do not try to commit it.
 
+## Documentation
+
+`docs/index.html` is the user-facing installation and reference page. **Always update it when any of the following change**: sensor names or roles, configurable parameters (defaults, ranges), operational behaviour (antifreeze, sampling, swap mechanism, filtration modes), or the preset matrix. The page targets end-users — keep explanations simple and jargon-free.
+
 ## Common commands
 
 All ESPHome commands are run from the repo root against a preset (`frangipool-*.yaml`) — never against a `packages/*.yaml` file (those lack `esphome:` top-level and will not validate standalone).
@@ -124,7 +128,7 @@ Default to **dropping dashboard references** rather than re-adding firmware enti
 The guards in the release workflows are intentional — do not remove them:
 
 - **Tag on `origin/main` only** — the refname-exact check (`grep -Fxq 'refs/remotes/origin/main'`) prevents releases from feat branches. Always tag a commit already on `main`.
-- **Idempotence guard** — `gh release view` before creating prevents silent overwrites on force-retag. To retag: `gh release delete vX.Y.Z --yes && git tag -d vX.Y.Z && git push origin :refs/tags/vX.Y.Z`, then re-tag.
+- **Idempotence guard** — `gh release view` before creating prevents silent overwrites on force-retag. To retag: `gh release delete X.Y.Z --yes && git tag -d X.Y.Z && git push origin :refs/tags/X.Y.Z`, then re-tag.
 - **Prev-tag by name, not position** — `grep -v -Fx "$current_tag"` skips the current tag by name so forward-looking retags compute the correct diff window.
 - **`pcb-0.1.0` is a seed anchor** — never delete or move it. It is the base for `git tag --list 'pcb-*'` prev-tag computation. The workflow skips it via an explicit guard.
 - **Shared concurrency group `release-main`** — both firmware and PCB workflows share it to prevent CHANGELOG auto-commit races on simultaneous tag pushes.
