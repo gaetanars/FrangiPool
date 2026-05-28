@@ -91,9 +91,10 @@ jobs:
         run: |
           VERSION="${{ github.ref_name }}"
           PRESET="${{ matrix.preset }}"
+          BUILD_DIR=".esphome/build/frangipool/.pioenvs/frangipool"
           mkdir -p firmware
-          cp "${{ steps.esphome-build.outputs.name }}/firmware.factory.bin" "firmware/${PRESET}-v${VERSION}.factory.bin"
-          cp "${{ steps.esphome-build.outputs.name }}/firmware.ota.bin"     "firmware/${PRESET}-v${VERSION}.ota.bin"
+          cp "${BUILD_DIR}/firmware.factory.bin" "firmware/${PRESET}-v${VERSION}.factory.bin"
+          cp "${BUILD_DIR}/firmware.ota.bin"     "firmware/${PRESET}-v${VERSION}.ota.bin"
           echo "- Built ${PRESET}-v${VERSION}.factory.bin + .ota.bin" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload firmware artifacts
