@@ -174,32 +174,13 @@ jobs:
       - name: Log CHANGELOG commit to step summary
         run: echo "- CHANGELOG committed to main for ${{ needs.preflight.outputs.version }}" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Create GitHub Release (draft)
+      - name: Create GitHub Release
         uses: ncipollo/release-action@339a81892b84b4eeb0f6e744e4574d79d0d9b8dd  # v1.21.0
         with:
           tag: ${{ needs.preflight.outputs.version }}
-          allowUpdates: true
-          makeLatest: legacy
           name: ${{ needs.preflight.outputs.version }}
           body: ${{ steps.release_notes.outputs.body }}
+          artifacts: "firmware/*.bin"
+          immutableCreate: true
+          makeLatest: legacy
           token: ${{ secrets.GITHUB_TOKEN }}
-          draft: true
-
-      - name: Upload firmware binaries to draft release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VERSION: ${{ needs.preflight.outputs.version }}
-        run: |
-          gh release upload "$VERSION" firmware/*.bin \
-            --repo "${{ github.repository }}"
-          BIN_COUNT=$(ls firmware/*.bin 2>/dev/null | wc -l)
-          echo "- Uploaded ${BIN_COUNT} firmware binaries to draft $VERSION" >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Publish release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VERSION: ${{ needs.preflight.outputs.version }}
-        run: |
-          gh release edit "$VERSION" --draft=false \
-            --repo "${{ github.repository }}"
-          echo "- GitHub Release $VERSION published" >> "$GITHUB_STEP_SUMMARY"
