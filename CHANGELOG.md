@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.5] - 2026-05-28
+### :sparkles: New Features
+- [`3613460`](https://github.com/gaetanars/FrangiPool/commit/36134603dc4d69b14c3fa95fb9fdcb1fbd172ef4) - **dallas**: add probe assignment text sensors and document swap action *(commit by [@gaetanars](https://github.com/gaetanars))*
+
+
 ## [0.4.2] - 2026-05-28
 ### :sparkles: New Features
 - [`09c6ee2`](https://github.com/gaetanars/FrangiPool/commit/09c6ee299d3eecfbf683b3a6253c7225d9891a45) - **dallas**: replace address substitutions with index-based swap action *(commit by [@gaetanars](https://github.com/gaetanars))*
@@ -107,3 +112,4 @@ Imported from [frangipool/pcb](https://github.com/frangipool/pcb) @ `cfd2e9f` (v
 [v0.3.0]: https://github.com/gaetanars/FrangiPool/compare/v0.2.0...v0.3.0
 [0.4.1]: https://github.com/gaetanars/FrangiPool/compare/0.3.0...0.4.1
 [0.4.2]: https://github.com/gaetanars/FrangiPool/compare/0.3.0...0.4.2
+[0.4.5]: https://github.com/gaetanars/FrangiPool/compare/0.4.4...0.4.5
