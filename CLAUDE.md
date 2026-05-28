@@ -8,6 +8,10 @@ ESPHome firmware-as-configuration for an ESP32 that autonomously runs a salt-poo
 
 `CLAUDE.md` itself is gitignored — it is a local agent guide, not a project artifact. Do not try to commit it.
 
+## Documentation
+
+`docs/index.html` is the user-facing installation and reference page. **Always update it when any of the following change**: sensor names or roles, configurable parameters (defaults, ranges), operational behaviour (antifreeze, sampling, swap mechanism, filtration modes), or the preset matrix. The page targets end-users — keep explanations simple and jargon-free.
+
 ## Common commands
 
 All ESPHome commands are run from the repo root against a preset (`frangipool-*.yaml`) — never against a `packages/*.yaml` file (those lack `esphome:` top-level and will not validate standalone).
