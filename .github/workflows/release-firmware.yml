@@ -4,6 +4,11 @@ on:
   push:
     tags:
       - '[0-9]+.[0-9]+.[0-9]+'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Tag version to release (ex: 0.4.1). Le tag doit déjà exister sur main.'
+        required: true
 
 # contents: write requis pour (a) release-action, (b) auto-commit du CHANGELOG.
 permissions:
@@ -21,17 +26,27 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
+      version: ${{ steps.ver.outputs.version }}
       prev_tag: ${{ steps.prev.outputs.prev_tag }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
         with:
           fetch-depth: 0
 
+      - name: Set effective version
+        id: ver
+        run: |
+          VERSION="${{ github.event.inputs.version || github.ref_name }}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "- Releasing version: $VERSION" >> "$GITHUB_STEP_SUMMARY"
+
       - name: Verify tag commit is on origin/main
         run: |
           git fetch origin main --quiet
-          if ! git branch -r --contains "${{ github.sha }}" --format='%(refname)' | grep -Fxq 'refs/remotes/origin/main'; then
-            echo "::error::Tag ${{ github.ref_name }} points to a commit absent from origin/main. Refusing to release."
+          VERSION="${{ steps.ver.outputs.version }}"
+          TAG_SHA=$(git rev-parse "refs/tags/${VERSION}" 2>/dev/null || echo "${{ github.sha }}")
+          if ! git branch -r --contains "$TAG_SHA" --format='%(refname)' | grep -Fxq 'refs/remotes/origin/main'; then
+            echo "::error::Tag ${VERSION} points to a commit absent from origin/main. Refusing to release."
             exit 1
           fi
 
@@ -39,15 +54,17 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if gh release view "${{ github.ref_name }}" --repo "${{ github.repository }}" >/dev/null 2>&1; then
-            echo "::error::Release ${{ github.ref_name }} already exists. Delete it explicitly (gh release delete ${{ github.ref_name }} --yes) before retagging."
+          VERSION="${{ steps.ver.outputs.version }}"
+          if gh release view "$VERSION" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            echo "::error::Release $VERSION already exists. Delete it explicitly (gh release delete $VERSION --yes) before retagging."
             exit 1
           fi
 
       - name: Compute previous firmware tag
         id: prev
         run: |
-          prev_tag=$(git tag --list '[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | grep -v -Fx "${{ github.ref_name }}" | head -n1)
+          VERSION="${{ steps.ver.outputs.version }}"
+          prev_tag=$(git tag --list '[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | grep -v -Fx "$VERSION" | head -n1)
           if [ -z "$prev_tag" ]; then
             echo "::error::No previous firmware tag found (format x.y.z). Push a baseline firmware tag first."
             exit 1
@@ -77,7 +94,7 @@ jobs:
 
       - name: Patch version
         run: |
-          VERSION="${{ github.ref_name }}"
+          VERSION="${{ needs.preflight.outputs.version }}"
           sed -i "s/version: dev/version: ${VERSION}/" ${{ matrix.preset }}.yaml
 
       - name: Build ${{ matrix.preset }}
@@ -89,7 +106,7 @@ jobs:
 
       - name: Collect firmware binaries
         run: |
-          VERSION="${{ github.ref_name }}"
+          VERSION="${{ needs.preflight.outputs.version }}"
           PRESET="${{ matrix.preset }}"
           BUILD_DIR=".esphome/build/frangipool/.pioenvs/frangipool"
           mkdir -p firmware
@@ -128,7 +145,7 @@ jobs:
         uses: requarks/changelog-action@b78a3354a01f4a1affb484b9264b506a815c46b1  # v1.10.3
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          fromTag: ${{ github.ref_name }}
+          fromTag: ${{ needs.preflight.outputs.version }}
           toTag: ${{ needs.preflight.outputs.prev_tag }}
           changelogFilePath: CHANGELOG.md
           excludeTypes: chore,style,build
@@ -145,24 +162,25 @@ jobs:
             printf '%s\n' "$CHANGELOG_BODY"
             echo "${delimiter}"
           } >> "$GITHUB_OUTPUT"
-          echo "- Composed release body for ${{ github.ref_name }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Composed release body for ${{ needs.preflight.outputs.version }}" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Commit CHANGELOG.md update
         uses: stefanzweifel/git-auto-commit-action@04702edda442b2e678b25b537cec683a1493fcb9  # v7.1.0
         with:
           branch: main
-          commit_message: 'docs(changelog): update CHANGELOG.md for ${{ github.ref_name }} [skip ci]'
+          commit_message: 'docs(changelog): update CHANGELOG.md for ${{ needs.preflight.outputs.version }} [skip ci]'
           file_pattern: CHANGELOG.md
 
       - name: Log CHANGELOG commit to step summary
-        run: echo "- CHANGELOG committed to main for ${{ github.ref_name }}" >> "$GITHUB_STEP_SUMMARY"
+        run: echo "- CHANGELOG committed to main for ${{ needs.preflight.outputs.version }}" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Create GitHub Release (draft)
         uses: ncipollo/release-action@339a81892b84b4eeb0f6e744e4574d79d0d9b8dd  # v1.21.0
         with:
+          tag: ${{ needs.preflight.outputs.version }}
           allowUpdates: true
           makeLatest: legacy
-          name: ${{ github.ref_name }}
+          name: ${{ needs.preflight.outputs.version }}
           body: ${{ steps.release_notes.outputs.body }}
           token: ${{ secrets.GITHUB_TOKEN }}
           draft: true
@@ -170,16 +188,18 @@ jobs:
       - name: Upload firmware binaries to draft release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.preflight.outputs.version }}
         run: |
-          gh release upload "${{ github.ref_name }}" firmware/*.bin \
+          gh release upload "$VERSION" firmware/*.bin \
             --repo "${{ github.repository }}"
           BIN_COUNT=$(ls firmware/*.bin 2>/dev/null | wc -l)
-          echo "- Uploaded ${BIN_COUNT} firmware binaries to draft ${{ github.ref_name }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Uploaded ${BIN_COUNT} firmware binaries to draft $VERSION" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Publish release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.preflight.outputs.version }}
         run: |
-          gh release edit "${{ github.ref_name }}" --draft=false \
+          gh release edit "$VERSION" --draft=false \
             --repo "${{ github.repository }}"
-          echo "- GitHub Release ${{ github.ref_name }} published" >> "$GITHUB_STEP_SUMMARY"
+          echo "- GitHub Release $VERSION published" >> "$GITHUB_STEP_SUMMARY"
