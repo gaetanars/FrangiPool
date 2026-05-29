@@ -55,6 +55,14 @@ globals:
     type: int
     restore_value: True
     initial_value: '0'
+  # Verrou one-shot : _calcul_filtration ne doit être déclenché par on_time_sync
+  # qu'une seule fois par boot (premier calcul après synchronisation NTP).
+  # Les re-sync périodiques de HA ne doivent pas provoquer de recalcul intempestif.
+  # restore_value: false — réarmé à chaque reboot pour que le calcul boot soit toujours effectué.
+  - id: g_calcul_boot_done
+    type: bool
+    restore_value: False
+    initial_value: 'false'
 
 select:
   - platform: template
@@ -324,9 +332,17 @@ text_sensor:
 time:
   - id: !extend esptime
     on_time_sync:
-      # Premier calcul après synchronisation NTP (boot ou re-sync périodique).
+      # Premier calcul après synchronisation NTP au boot uniquement.
+      # Les re-sync périodiques de HA (toutes les ~15 min) ne doivent pas
+      # provoquer de recalcul : le planning du jour est fixé à minuit et à
+      # chaque changement de paramètre.
       then:
-        - script.execute: _calcul_filtration
+        - if:
+            condition:
+              lambda: 'return !id(g_calcul_boot_done);'
+            then:
+              - lambda: 'id(g_calcul_boot_done) = true;'
+              - script.execute: _calcul_filtration
     on_time:
       - cron: "0 0 0 * * *"
         then:

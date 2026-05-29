@@ -8,7 +8,13 @@ description: L'ESP calcule les horaires de filtration en fonction de la tempéra
 
 L'ESP calcule lui-même les horaires de filtration en fonction de la température de la piscine. **La pompe démarre et s'arrête sans aucune action de Home Assistant.** HA reste utile pour la supervision et les notifications, mais son absence ou son redémarrage n'interrompt pas la filtration.
 
-La planification est réévaluée toutes les **30 secondes**.
+La pompe est pilotée par un automate cadencé toutes les **30 secondes** qui compare l'heure courante aux plages calculées. Les plages horaires elles-mêmes sont recalculées dans les cas suivants :
+
+- **Au démarrage** — après la première synchronisation NTP
+- **À minuit** — pour prendre en compte la température du nouveau jour
+- **En fin de cycle** — après le cycle matin ou le cycle soir
+- **À chaque modification d'un paramètre** — immédiatement, sans attendre le tick de 30 s
+- **Via l'action API `recalc_filtration`** — à la demande
 
 ## Modes de filtration
 
@@ -23,17 +29,20 @@ Le mode par défaut est **Auto**.
 
 ### Mode Courbe — calcul de la durée
 
-La durée journalière en mode Courbe suit une courbe progressive selon la température :
+La durée journalière suit une courbe polynomiale du 3ᵉ degré ajustée sur les recommandations de filtration. Elle croît fortement au-dessus de 22 °C pour couvrir les pics de chaleur estivaux.
 
-| Température | Durée |
+| Température | Durée (coeff 100 %) |
 |---|---|
-| 10 °C | ~3 h |
-| 16 °C | ~5 h |
-| 20 °C | ~7 h |
-| 26 °C | ~9 h |
-| 30 °C | ~12 h |
+| 10 °C | 2 h |
+| 15 °C | 3 h 30 |
+| 20 °C | 5 h |
+| 25 °C | 9 h |
+| 28 °C | ~14 h |
+| ≥ 32 °C | continu (≥ 24 h) |
 
-La durée obtenue est multipliée par le **Coefficient Filtration** (50–150 %, défaut 100 %).
+Au-delà de 32 °C la durée calculée dépasse 24 h : l'ESP plafonne à une filtration quasi-continue, ce qui est intentionnel pour les épisodes caniculaires.
+
+La durée obtenue est multipliée par le **Coefficient Filtration** (50–150 %, défaut 100 %). Par exemple à 25 °C avec un coefficient à 80 %, la durée effective sera de 9 h × 0,8 = **7 h 12**.
 
 ### Mode Hiver — calcul de la durée
 
