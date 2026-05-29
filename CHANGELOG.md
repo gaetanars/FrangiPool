@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-05-29
+### :sparkles: New Features
+- [`baa51ce`](https://github.com/gaetanars/FrangiPool/commit/baa51ce38b00dcf63c3b054f5ed17f65925af765) - **redox**: replace manual offset number entity with API action *(commit by [@gaetanars](https://github.com/gaetanars))*
+
+### :memo: Documentation Changes
+- [`4ed48c2`](https://github.com/gaetanars/FrangiPool/commit/4ed48c245489e2c6862f21de5b95c97729201bc4) - migrate to Docusaurus *(commit by [@gaetanars](https://github.com/gaetanars))*
+
+
 ## [0.5.1] - 2026-05-28
 ### :memo: Documentation Changes
 
@@ -126,3 +134,4 @@ Imported from [frangipool/pcb](https://github.com/frangipool/pcb) @ `cfd2e9f` (v
 [0.4.5]: https://github.com/gaetanars/FrangiPool/compare/0.4.4...0.4.5
 [0.5.0]: https://github.com/gaetanars/FrangiPool/compare/0.4.5...0.5.0
 [0.5.1]: https://github.com/gaetanars/FrangiPool/compare/0.5.0...0.5.1
+[0.6.0]: https://github.com/gaetanars/FrangiPool/compare/0.5.1...0.6.0
