@@ -1,13 +1,16 @@
 import React from 'react';
 import Link from '@docusaurus/Link';
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
+import useBaseUrl from '@docusaurus/useBaseUrl';
 import Layout from '@theme/Layout';
 import FirmwareSelector from '../components/FirmwareSelector';
 import styles from './index.module.css';
 
 function HomepageHero() {
+  const logoSrc = useBaseUrl('img/frangipool_logo.png');
   return (
     <div className="hero-frangipool">
+      <img src={logoSrc} alt="FrangiPool" width={160} height={160} style={{ borderRadius: 24, marginBottom: '1rem' }} />
       <h1>Frangi<span style={{ color: 'var(--ifm-color-primary)' }}>Pool</span></h1>
       <p>
         Firmware ESP32 open-source pour piscine à sel.<br />

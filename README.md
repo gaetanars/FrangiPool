@@ -1,9 +1,15 @@
-# FrangiPool
+<p align="center">
+  <img src="img/frangipool_logo.png" alt="FrangiPool" width="150">
+</p>
 
-[![ESPHome](https://img.shields.io/badge/ESPHome-ESP32-blue?logo=esphome&logoColor=white)](https://esphome.io)
-[![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2024.6%2B-41BDF5?logo=home-assistant&logoColor=white)](https://www.home-assistant.io)
-[![GitHub release](https://img.shields.io/github/v/release/gaetanars/FrangiPool?label=derni%C3%A8re%20version&color=brightgreen)](https://github.com/gaetanars/FrangiPool/releases)
-[![GitHub stars](https://img.shields.io/github/stars/gaetanars/FrangiPool?style=social)](https://github.com/gaetanars/FrangiPool/stargazers)
+<h1 align="center">FrangiPool</h1>
+
+<p align="center">
+  <a href="https://esphome.io"><img src="https://img.shields.io/badge/ESPHome-ESP32-blue?logo=esphome&logoColor=white" alt="ESPHome"></a>
+  <a href="https://www.home-assistant.io"><img src="https://img.shields.io/badge/Home%20Assistant-2024.6%2B-41BDF5?logo=home-assistant&logoColor=white" alt="Home Assistant"></a>
+  <a href="https://github.com/gaetanars/FrangiPool/releases"><img src="https://img.shields.io/github/v/release/gaetanars/FrangiPool?label=derni%C3%A8re%20version&color=brightgreen" alt="GitHub release"></a>
+  <a href="https://github.com/gaetanars/FrangiPool/stargazers"><img src="https://img.shields.io/github/stars/gaetanars/FrangiPool?style=social" alt="GitHub stars"></a>
+</p>
 
 Firmware ESP32 open-source pour l'automatisation d'une piscine à sel. La filtration est gérée directement par l'ESP — calcul des horaires, démarrage et arrêt de la pompe — sans aucune automatisation Home Assistant requise.
 

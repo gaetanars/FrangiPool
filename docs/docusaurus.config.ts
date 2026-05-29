@@ -5,7 +5,7 @@ import type * as Preset from '@docusaurus/preset-classic';
 const config: Config = {
   title: 'FrangiPool',
   tagline: 'Automatisation ESP32 pour piscine à sel — filtration autonome, électrolyseur, Redox, pH.',
-  favicon: 'img/logo.svg',
+  favicon: 'img/frangipool_logo.png',
 
   url: 'https://gaetanars.github.io',
   baseUrl: '/FrangiPool/',
@@ -61,8 +61,9 @@ const config: Config = {
       title: 'FrangiPool',
       logo: {
         alt: 'FrangiPool',
-        src: 'img/logo.svg',
-        srcDark: 'img/logo.svg',
+        src: 'img/frangipool_logo.png',
+        width: 32,
+        height: 32,
       },
       items: [
         {
