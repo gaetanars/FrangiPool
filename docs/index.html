@@ -237,7 +237,7 @@
     <a href="#installer">Installer</a>
     <a href="#presets">Presets</a>
     <a href="#filtration">Filtration</a>
-    <a href="#calibration">Calibration pH</a>
+    <a href="#calibration">Calibration</a>
     <a href="#migration">Migration</a>
     <a href="https://github.com/gaetanars/FrangiPool">GitHub</a>
   </div>
@@ -484,10 +484,59 @@
   </div>
 </section>
 
-<!-- CALIBRATION pH -->
+<!-- CALIBRATION SONDES -->
 <section id="calibration">
   <div class="container">
-    <h2>Calibration pH</h2>
+    <h2>Calibration sondes</h2>
+
+    <h3>Redox / ORP</h3>
+    <p>Deux approches coexistent, <strong>mutuellement exclusives</strong> : l'offset de calibration par solution tampon (calculé par les boutons 225 mV / 475 mV) et la correction manuelle via action API (prend la main si non nulle). Le capteur <strong>Redox Offset</strong> (diagnostic) indique en permanence l'offset effectivement utilisé dans le calcul.</p>
+
+    <p style="margin-top:1rem;font-weight:600;color:var(--light)">Calibration par solution tampon</p>
+    <p>Référence de base à établir après installation ou remplacement de sonde.</p>
+
+    <div class="callout">
+      <strong>Procédure</strong> — Sortir la sonde du circuit, rincer à l'eau déminéralisée, immerger dans la solution tampon, attendre 1 minute de stabilisation avant de lancer.
+    </div>
+
+    <div class="cal-steps">
+      <div class="cal-step">
+        <div class="cal-step-body">
+          <strong>Préparer</strong>
+          Sortir la sonde, rincer, immerger dans la solution tampon 225 mV ou 475 mV. Attendre 1 min.
+        </div>
+      </div>
+      <div class="cal-step">
+        <div class="cal-step-body">
+          <strong>Lancer</strong>
+          Dans HA, appuyer sur le bouton <em>Redox Calibration 225mV</em> ou <em>Redox Calibration 475mV</em>. Le firmware attend 3 min, capture la tension et calcule l'offset.
+        </div>
+      </div>
+      <div class="cal-step">
+        <div class="cal-step-body">
+          <strong>Confirmer</strong>
+          Notification HA à la fin. Le capteur <em>Redox Offset</em> affiche l'offset calculé.
+        </div>
+      </div>
+    </div>
+
+    <p style="margin-top:1.5rem;font-weight:600;color:var(--light)">Correction manuelle (action API)</p>
+    <p>Pour ajuster finement la lecture sans recalibration complète — typiquement après un <strong>changement d'ESP</strong> ou une légère dérive de sonde. Mettre l'offset à <code>0</code> désactive le manuel et réactive l'offset de calibration tampon.</p>
+
+    <div class="info">
+      <strong>Developer Tools → Actions</strong> → <code>esphome.frangipool_set_redox_manual_offset</code>
+      <pre style="margin-top:.6rem;background:rgba(0,0,0,.25);border-radius:6px;padding:.65rem .9rem;font-size:.82rem;overflow-x:auto"><code>action: esphome.frangipool_set_redox_manual_offset
+data:
+  offset: 45   # en mV — négatif pour abaisser, 0 pour désactiver</code></pre>
+    </div>
+
+    <div class="callout">
+      <strong>Après un changement d'ESP</strong> — L'offset est stocké dans la mémoire NVS de la puce. Un nouvel ESP démarre avec NVS vierge : offset = 0. Re-saisir la valeur via l'action API après tout remplacement de puce.
+    </div>
+
+    <p>Le bouton <em>Redox Calibration Reset</em> efface les deux offsets et remet la sonde en lecture brute.</p>
+
+    <h3 style="margin-top:2.5rem">pH</h3>
     <p>Le module pH applique une calibration <strong>two-points</strong> : <code>pH = slope × V + intercept</code>, recalculés à chaque calibration. Cible : sonde <strong>Gravity pH Meter v2.0</strong> (pH 7 ≈ 2.5 V, pH 4 ≈ 1.65 V).</p>
 
     <h3>Matériel nécessaire</h3>

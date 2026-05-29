@@ -5,18 +5,9 @@ globals:
   - id: g_redox_offset
     type: float
     restore_value: true
-
-number:
-  - platform: template
-    entity_category: config
-    name: "Redox Calibration Manuelle"
-    min_value: -300
-    max_value: 300
-    step: 1
-    optimistic: true
-    initial_value: 0
+  - id: g_redox_manual_offset
+    type: float
     restore_value: true
-    id: "redox_manual_offset"
 
 sensor:
   - platform: ads1115
@@ -42,8 +33,9 @@ sensor:
     id: realtime_redox
     accuracy_decimals: 0
     update_interval: 10s
-    lambda: |
-      if (id(redox_manual_offset).state != 0.0) return ((2500-id(ads1115_a0).state)/1.037) + id(redox_manual_offset).state;
+    lambda: |-
+      float manual = id(g_redox_manual_offset);
+      if (manual != 0.0f) return ((2500-id(ads1115_a0).state)/1.037) + manual;
       else return ((2500-id(ads1115_a0).state)/1.037) + id(g_redox_offset);
 
   - platform: template
@@ -60,7 +52,9 @@ sensor:
     name: Redox Offset
     entity_category: diagnostic
     id: redox_offset_sensor
-    lambda: return id(g_redox_offset);
+    lambda: |-
+      float manual = id(g_redox_manual_offset);
+      return (manual != 0.0f) ? manual : id(g_redox_offset);
 
 button:
   - platform: template
@@ -68,9 +62,9 @@ button:
     entity_category: config
     on_press:
       then:
-        - number.set:
-            id: redox_manual_offset
-            value: 0
+        - globals.set:
+            id: g_redox_manual_offset
+            value: '0.0'
         - delay: 180s
         - globals.set:
             id: g_redox_offset
@@ -89,9 +83,9 @@ button:
     entity_category: config
     on_press:
       then:
-        - number.set:
-            id: redox_manual_offset
-            value: 0
+        - globals.set:
+            id: g_redox_manual_offset
+            value: '0.0'
         - delay: 180s
         - globals.set:
             id: g_redox_offset
@@ -133,3 +127,26 @@ interval:
                   float prev = id(g_store_pool_redox);
                   if (std::isnan(prev)) return v;
                   return prev * 0.8f + v * 0.2f;
+
+api:
+  actions:
+    # set_redox_manual_offset(offset: float)
+    #   Correction manuelle du Redox en mV (plage conseillée : -300..300).
+    #   Remplace l'ancienne entité number supprimée — à utiliser depuis
+    #   HA Developer Tools → Actions ou une automatisation HA.
+    #   Si offset = 0 : désactive le manuel, l'offset de calibration (225/475 mV) reprend la main.
+    #   Persiste dans la NVS : survit aux reboots, mais PAS à un changement d'ESP (re-appliquer).
+    #
+    #   Exemple — HA Developer Tools → Actions :
+    #     action: esphome.frangipool_set_redox_manual_offset
+    #     data:
+    #       offset: 45
+    - action: set_redox_manual_offset
+      variables:
+        offset: float
+      then:
+        - globals.set:
+            id: g_redox_manual_offset
+            value: !lambda "return offset;"
+        - component.update: redox_offset_sensor
+        - component.update: realtime_redox
