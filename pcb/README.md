@@ -2,12 +2,8 @@
 
 ![Vue 2D](./images/Vue_2D.svg)
 
-Vous trouverez ici le code source du PCB de FrangiPool.
-Il s'agit d'une carte alimentée en 5v qui va accueillir différents composants dont une carte ESP32 pour le calcul principal.
-Tous les GPIO de l'ESP32 sont accessibles via des connecteurs dupont.
-La carte possède en plus :
+PCB pour héberger l'ESP32 et les périphériques FrangiPool (ADS1115, bus 1-Wire, relais).
 
-* un convertisseur analogique/I2C ADS1115 avec un convertisseur pour gérer 4 entrées analogiques en 5V
-* Un bus 1Wire avec 4 connecteurs directs
-* Un connecteur pour un écran Nextion
-* Des connecteurs I2C
+📖 **Documentation complète :** [gaetanars.github.io/FrangiPool/docs/pcb-cablage/presentation](https://gaetanars.github.io/FrangiPool/docs/pcb-cablage/presentation)
+
+Les Gerbers pour fabrication sont publiés en tant qu'asset `gerber.zip` sur les [releases PCB](https://github.com/gaetanars/FrangiPool/releases) (tags `pcb-*.*.*`).

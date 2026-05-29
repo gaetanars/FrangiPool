@@ -1,0 +1,54 @@
+---
+sidebar_position: 1
+title: Choisir son preset et flasher
+description: Sélectionnez la configuration correspondant à votre matériel et flashez l'ESP32 directement depuis le navigateur.
+---
+
+import FirmwareSelector from '@site/src/components/FirmwareSelector';
+
+# Choisir son preset et flasher
+
+FrangiPool se décline en **8 configurations** (presets) pour couvrir tous les matériels courants. Chaque preset inclut systématiquement la **filtration autonome**, la **protection antigel** et la **sonde de température**. Les modules supplémentaires sont sélectionnés par les flags du nom.
+
+## Matrice des presets
+
+| Preset | Électrolyseur | Redox/ORP | pH | Auto-régulation | Booster |
+|--------|:---:|:---:|:---:|:---:|:---:|
+| `frangipool-erp`  | ✓ | ✓ | ✓ | ✓ | — |
+| `frangipool-er`   | ✓ | ✓ | — | ✓ | — |
+| `frangipool-ep`   | ✓ | — | ✓ | — | — |
+| `frangipool-e`    | ✓ | — | — | — | — |
+| `frangipool-berp` | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `frangipool-ber`  | ✓ | ✓ | — | ✓ | ✓ |
+| `frangipool-bep`  | ✓ | — | ✓ | — | ✓ |
+| `frangipool-be`   | ✓ | — | — | — | ✓ |
+
+**Nomenclature des flags :** `B` = Booster (surpresseur), `E` = Électrolyseur, `R` = Redox/ORP, `P` = pH. Ordre fixe B → E → R → P.
+
+**Auto-régulation** : contrôle automatique de l'électrolyseur selon le seuil Redox cible — nécessite E + R.
+
+:::tip Comment choisir ?
+- Piscine à sel avec sonde Redox et pH → **`erp`** (ou `berp` si vous avez un booster)
+- Piscine à sel avec sonde Redox uniquement → **`er`**
+- Électrolyseur sans sonde → **`e`**
+:::
+
+## Installer FrangiPool
+
+Connectez l'ESP32 par USB, sélectionnez le preset correspondant à votre matériel et cliquez **Installer FrangiPool**.
+
+:::note Navigateur requis
+L'installation directe nécessite **Chrome ou Edge** (Web Serial API). Firefox n'est pas supporté.
+:::
+
+<FirmwareSelector />
+
+## Après le flash
+
+Une fois le firmware installé :
+
+1. **Configuration WiFi** — ESPHome Web propose la configuration WiFi automatiquement (Improv Serial). Sinon, connectez-vous au réseau `frangipool-XXXX` et ouvrez `http://192.168.4.1`.
+2. **Adoption** — Une fois sur le réseau local, ESPHome Dashboard ou Home Assistant détecte le device par mDNS. Cliquez **Adopt** pour générer et pousser automatiquement une clé API et un mot de passe OTA uniques.
+3. **Mises à jour OTA** — Le firmware expose un endpoint OTA. Toutes les mises à jour ultérieures se font depuis ESPHome Dashboard sans câble USB.
+
+Pour les détails, voir [Configuration WiFi et adoption](./wifi-adoption) et [Mise en service](./mise-en-service).

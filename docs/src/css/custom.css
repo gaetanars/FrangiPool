@@ -1,0 +1,193 @@
+:root {
+  --ifm-color-primary: #0ea5e9;
+  --ifm-color-primary-dark: #0284c7;
+  --ifm-color-primary-darker: #0369a1;
+  --ifm-color-primary-darkest: #075985;
+  --ifm-color-primary-light: #38bdf8;
+  --ifm-color-primary-lighter: #7dd3fc;
+  --ifm-color-primary-lightest: #bae6fd;
+  --ifm-code-font-size: 85%;
+  --docusaurus-highlighted-code-line-bg: rgba(14, 165, 233, 0.1);
+}
+
+[data-theme='dark'] {
+  --ifm-color-primary: #38bdf8;
+  --ifm-color-primary-dark: #0ea5e9;
+  --ifm-color-primary-darker: #0284c7;
+  --ifm-color-primary-darkest: #0369a1;
+  --ifm-color-primary-light: #7dd3fc;
+  --ifm-color-primary-lighter: #bae6fd;
+  --ifm-color-primary-lightest: #e0f2fe;
+  --docusaurus-highlighted-code-line-bg: rgba(56, 189, 248, 0.15);
+}
+
+/* Preset selector */
+.preset-grid {
+  display: grid;
+  gap: 0.4rem;
+  margin-bottom: 1.5rem;
+}
+
+.preset-option {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.65rem 1rem;
+  border-radius: 8px;
+  border: 1.5px solid var(--ifm-color-emphasis-300);
+  cursor: pointer;
+  background: var(--ifm-card-background-color);
+  transition: border-color 0.15s;
+}
+
+.preset-option:hover {
+  border-color: var(--ifm-color-primary);
+}
+
+.preset-option.selected {
+  border-color: var(--ifm-color-primary);
+  background: rgba(14, 165, 233, 0.08);
+}
+
+[data-theme='dark'] .preset-option.selected {
+  background: rgba(56, 189, 248, 0.1);
+}
+
+.preset-slug {
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.8rem;
+  color: var(--ifm-color-primary);
+  background: rgba(14, 165, 233, 0.1);
+  padding: 2px 7px;
+  border-radius: 4px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.preset-label {
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.preset-features {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  margin-top: 3px;
+}
+
+.preset-feature {
+  font-size: 0.68rem;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: rgba(34, 197, 94, 0.1);
+  color: #22c55e;
+  border: 1px solid rgba(34, 197, 94, 0.25);
+}
+
+.install-row {
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--ifm-color-emphasis-300);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.install-note {
+  font-size: 0.8rem;
+  color: var(--ifm-color-emphasis-600);
+  text-align: center;
+}
+
+esp-web-install-button::part(button) {
+  background: var(--ifm-color-primary);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 0.65rem 1.75rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+esp-web-install-button::part(button):hover {
+  opacity: 0.85;
+}
+
+/* Hero section */
+.hero-frangipool {
+  text-align: center;
+  padding: 3rem 1rem 2rem;
+}
+
+.hero-frangipool h1 {
+  font-size: clamp(2rem, 5vw, 3rem);
+  font-weight: 800;
+}
+
+.hero-frangipool p {
+  font-size: 1.1rem;
+  max-width: 520px;
+  margin: 0 auto 2rem;
+}
+
+.hero-badges {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-bottom: 2.5rem;
+}
+
+.hero-badge {
+  font-size: 0.75rem;
+  padding: 3px 10px;
+  border-radius: 20px;
+  border: 1px solid var(--ifm-color-emphasis-300);
+  color: var(--ifm-color-emphasis-700);
+}
+
+/* Installer card */
+.installer-card {
+  max-width: 560px;
+  margin: 0 auto;
+  border: 1px solid var(--ifm-color-emphasis-300);
+  border-radius: 10px;
+  padding: 1.75rem;
+  background: var(--ifm-card-background-color);
+}
+
+.installer-card h2 {
+  font-size: 1.1rem;
+  margin-bottom: 1.25rem;
+  margin-top: 0;
+}
+
+/* Feature grid on homepage */
+.features-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin: 2rem 0;
+}
+
+.feature-card {
+  padding: 1.25rem;
+  border: 1px solid var(--ifm-color-emphasis-300);
+  border-radius: 8px;
+  background: var(--ifm-card-background-color);
+}
+
+.feature-card h3 {
+  font-size: 0.95rem;
+  margin-top: 0;
+  margin-bottom: 0.5rem;
+}
+
+.feature-card p {
+  font-size: 0.85rem;
+  margin: 0;
+  color: var(--ifm-color-emphasis-700);
+}

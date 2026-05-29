@@ -1,0 +1,8 @@
+{
+  "label": "Démarrage rapide",
+  "position": 1,
+  "link": {
+    "type": "generated-index",
+    "description": "Choisissez votre configuration, flashez votre ESP32 et mettez FrangiPool en service en quelques minutes."
+  }
+}

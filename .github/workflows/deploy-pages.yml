@@ -1,17 +1,27 @@
 name: Deploy GitHub Pages
 
 on:
+  # Déploiement automatique après une release firmware réussie
   workflow_run:
     workflows: ["Release firmware"]
     types: [completed]
+
+  # Déploiement manuel ou correction de doc seule (push sur main)
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version à déployer (ex: 0.3.0). Laisser vide pour utiliser le dernier release.'
+        description: 'Version firmware à déployer (ex: 0.5.0). Laisser vide pour la dernière release.'
         required: false
 
+  # Corrections de documentation sans release firmware
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - '!docs/static/install/**'  # exclut les assets firmware (non trackés en git)
+
 permissions:
-  contents: write
+  contents: read
   pages: write
   id-token: write
 
@@ -21,56 +31,76 @@ concurrency:
 
 jobs:
   deploy:
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    # Ne pas déployer si workflow_run a échoué
+    if: >-
+      github.event_name != 'workflow_run' ||
+      github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
+
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
 
-      - name: Resolve target version
+      - name: Resolve target firmware version
         id: version
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           if [ -n "${{ github.event.inputs.version }}" ]; then
             VERSION="${{ github.event.inputs.version }}"
-          elif [ "${{ github.event_name }}" = "workflow_run" ]; then
-            VERSION=$(gh release list --repo "${{ github.repository }}" --limit 1 --json tagName -q '.[0].tagName')
           else
-            VERSION=$(gh release list --repo "${{ github.repository }}" --limit 1 --json tagName -q '.[0].tagName')
+            VERSION=$(gh release list \
+              --repo "${{ github.repository }}" \
+              --limit 10 \
+              --json tagName \
+              --jq '[.[] | select(.tagName | test("^[0-9]+\\.[0-9]+\\.[0-9]+$"))] | first | .tagName')
           fi
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-          echo "- Deploying manifests for ${VERSION}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Deploying firmware manifests for ${VERSION}" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Download web installer assets for all presets
+      - name: Download firmware assets for all presets
         env:
           VERSION: ${{ steps.version.outputs.version }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           for SLUG in e er ep erp be ber bep berp; do
-            DIR="docs/install/${SLUG}"
+            DIR="docs/static/install/${SLUG}"
             TMP="/tmp/pages-${SLUG}"
             mkdir -p "${DIR}" "${TMP}"
 
-            # Download all pages assets for this preset (slug-prefixed in the release)
             gh release download "$VERSION" \
               --repo "${{ github.repository }}" \
               --pattern "pages-${SLUG}-*" \
               --dir "${TMP}"
 
-            # Strip the "pages-${SLUG}-" prefix to restore original filenames so
-            # the manifest.json relative paths produced by esphome/build-action
-            # resolve correctly when served from Pages
+            # Strip the "pages-${SLUG}-" prefix to restore original filenames
             for f in "${TMP}/pages-${SLUG}-"*; do
               fname="${f#${TMP}/pages-${SLUG}-}"
               cp "$f" "${DIR}/${fname}"
             done
 
-            echo "- Prepared web installer assets for frangipool-${SLUG}" >> "$GITHUB_STEP_SUMMARY"
+            echo "- Prepared install assets for frangipool-${SLUG}" >> "$GITHUB_STEP_SUMMARY"
           done
+
+      - name: Set up Node.js
+        uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e  # v4.3.0
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: docs/package-lock.json
+
+      - name: Install Docusaurus dependencies
+        working-directory: docs
+        run: npm ci
+
+      - name: Build Docusaurus
+        working-directory: docs
+        run: npm run build
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
 
       - name: Setup Pages
         uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d  # v6.0.0
@@ -78,7 +108,7 @@ jobs:
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9  # v5.0.0
         with:
-          path: docs/
+          path: docs/build/
 
       - name: Deploy to GitHub Pages
         id: deployment

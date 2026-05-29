@@ -1,0 +1,10 @@
+# Docusaurus build output
+build/
+.docusaurus/
+.cache-loader/
+
+# Node modules
+node_modules/
+
+# Firmware assets — populés par CI (deploy-pages.yml), jamais committés
+static/install/

@@ -1,0 +1,8 @@
+{
+  "label": "PCB & Câblage",
+  "position": 5,
+  "link": {
+    "type": "generated-index",
+    "description": "Présentation du PCB FrangiPool, mappage des GPIO, câblage des capteurs et fichiers de fabrication."
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "label": "Fonctionnement",
+  "position": 2,
+  "link": {
+    "type": "generated-index",
+    "description": "Comment FrangiPool gère la filtration, l'électrolyseur, les capteurs et la protection de la piscine."
+  }
+}

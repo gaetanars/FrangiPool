@@ -6,11 +6,32 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ESPHome firmware-as-configuration for an ESP32 that autonomously runs a salt-pool (filtration, optional electrolyser, pH, ORP/Redox, booster). There is no application source, no test suite — the deliverable is the set of YAML presets at the repo root plus the reusable packages under [packages/](packages/). The ESP is authoritative: Home Assistant provides time and notifications but is not required for the pump to run.
 
-`CLAUDE.md` itself is gitignored — it is a local agent guide, not a project artifact. Do not try to commit it.
+`CLAUDE.md` is committed to the repository and travels with the project. Any contributor using Claude Code on this repo gets these rules automatically.
 
-## Documentation
+## Documentation maintenance
 
-`docs/index.html` is the user-facing installation and reference page. **Always update it when any of the following change**: sensor names or roles, configurable parameters (defaults, ranges), operational behaviour (antifreeze, sampling, swap mechanism, filtration modes), or the preset matrix. The page targets end-users — keep explanations simple and jargon-free.
+The user-facing documentation lives in `docs/docs/` (Docusaurus). **A firmware change is not complete until the documentation reflects it.** After any edit to `packages/*.yaml` or `frangipool-*.yaml`, re-read the relevant doc pages and update them before considering the task done.
+
+### Trigger → doc file mapping
+
+| What changed | Files to update |
+| --- | --- |
+| New / renamed / removed entity | `docs/docs/home-assistant/entites.md` + relevant feature page |
+| Configurable parameter (default, range, description) | `docs/docs/configuration/parametres-filtration.md` or relevant config page |
+| Filtration mode or scheduling behaviour | `docs/docs/fonctionnement/filtration-autonome.md` |
+| Antifreeze behaviour | `docs/docs/fonctionnement/antigel.md` |
+| Forced mode | `docs/docs/fonctionnement/mode-force.md` |
+| Electrolyser regulation | `docs/docs/fonctionnement/redox-orp.md` + `docs/docs/fonctionnement/electrolyseur.md` |
+| pH calibration | `docs/docs/configuration/calibration-ph.md` + `docs/docs/fonctionnement/ph.md` |
+| Redox calibration | `docs/docs/configuration/calibration-redox.md` + `docs/docs/fonctionnement/redox-orp.md` |
+| HA API action (new, changed, removed) | `docs/docs/home-assistant/actions-api.md` |
+| Dallas / temperature probe behaviour | `docs/docs/configuration/sondes-temperature.md` |
+| GPIO assignment | `docs/docs/pcb-cablage/gpio-map.md` + `docs/docs/pcb-cablage/presentation.md` |
+| New preset or new package | `docs/docs/reference/presets.md` + `docs/docs/getting-started/choisir-son-preset.mdx` |
+| New package | `docs/docs/reference/packages-avances.md` |
+| Booster behaviour | `docs/docs/fonctionnement/surpresseur.md` |
+
+After updating the docs, verify the Docusaurus build stays clean: `cd docs && npm run build`.
 
 ## Common commands
 
@@ -36,7 +57,7 @@ Presets use `!include packages/<name>.yaml` — they always resolve against the 
 
 ### Dallas probe addressing
 
-Presets ship with `temp_address: "0x0000000000000000"`. Flash as-is over USB, open `esphome logs <preset>`, and the 1-Wire bus scan prints discovered probe addresses at boot. Substitute those addresses into the preset's `substitutions:` block.
+Probes are detected by **index** (0 and 1) — no address substitution needed. The only substitution in `base.yaml` is `preset_slug` (internal, used for OTA manifest URL). Physical probe assignment is managed via the `swap_dallas_probes` API action at runtime.
 
 ## Architecture
 
@@ -44,7 +65,7 @@ Presets ship with `temp_address: "0x0000000000000000"`. Flash as-is over USB, op
 
 The eight `frangipool-*.yaml` files at the repo root are thin composition layers. Each defines only:
 
-- `substitutions:` (device name, Dallas addresses)
+- `substitutions:` (`preset_slug` only — used for OTA manifest URL)
 - `esphome.project` (preset name + version)
 - `dashboard_import.package_import_url` (for ESPHome Dashboard "Use a project")
 - `packages:` list — which modules to import from [packages/](packages/)
@@ -137,5 +158,6 @@ The guards in the release workflows are intentional — do not remove them:
 
 ## Where to find more context
 
-- [README.md](README.md) — user-facing documentation (preset matrix, installation, filtration spec, HA migration v1.x → v2.0).
+- [README.md](README.md) — short project overview and quickstart (no migration content).
+- [docs/docs/](docs/docs/) — full Docusaurus documentation (20 pages across 6 sections).
 - [todos/](todos/) — gitignored local work queue; read-only reference when working on a matching topic.
